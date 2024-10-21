@@ -314,6 +314,10 @@ COVERAGE_REPORT=$(abs_builddir)/lcov-report
 COVERAGE_LCOV_OPTIONS=--rc lcov_branch_coverage=1
 COVERAGE_REPORT_OPTIONS=--rc lcov_branch_coverage=1 --branch-coverage --title "CPython $(VERSION) LCOV report [commit $(shell $(GITVERSION))]"
 
+PY_LLVM_DIR = ../py_llvm/cmake-build-debug
+LIBS += -L$(PY_LLVM_DIR) -lpy_llvm -lstdc++
+LDFLAGS += -L$(PY_LLVM_DIR) -Wl,-rpath,$(PY_LLVM_DIR)
+CFLAGS += -I../py_llvm
 
 # === Definitions added by makesetup ===
 
@@ -783,7 +787,7 @@ clinic: check-clean-src $(srcdir)/Modules/_blake2/blake2s_impl.c
 
 # Build the interpreter
 $(BUILDPYTHON):	Programs/python.o $(LINK_PYTHON_DEPS)
-	$(LINKCC) $(PY_CORE_LDFLAGS) $(LINKFORSHARED) -o $@ Programs/python.o $(LINK_PYTHON_OBJS) $(LIBS) $(MODLIBS) $(SYSLIBS)
+	$(LINKCC) $(PY_CORE_LDFLAGS) $(LINKFORSHARED) $(PY_LLVM_DIR)/libpy_llvm.so -o $@ Programs/python.o $(LINK_PYTHON_OBJS) $(LIBS) $(MODLIBS) $(SYSLIBS) $(PY_LLVM_DIR)/libpy_llvm.so
 
 platform: $(PYTHON_FOR_BUILD_DEPS) pybuilddir.txt
 	$(RUNSHARED) $(PYTHON_FOR_BUILD) -c 'import sys ; from sysconfig import get_platform ; print("%s-%d.%d" % (get_platform(), *sys.version_info[:2]))' >platform
@@ -810,7 +814,7 @@ $(srcdir)/Modules/_blake2/blake2s_impl.c: $(srcdir)/Modules/_blake2/blake2b_impl
 	$(PYTHON_FOR_REGEN) $(srcdir)/Tools/clinic/clinic.py -f $@
 
 # Build static library
-$(LIBRARY): $(LIBRARY_OBJS)
+$(LIBRARY): $(LIBRARY_OBJS) $(PY_LLVM_DIR)/libpy_llvm.so
 	-rm -f $@
 	$(AR) $(ARFLAGS) $@ $(LIBRARY_OBJS)
 

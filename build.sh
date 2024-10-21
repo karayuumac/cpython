@@ -1,0 +1,3 @@
+make clean
+./configure CFLAGS="-g -O0" CXXFLAGS="-g -O0"
+make

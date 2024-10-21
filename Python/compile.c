@@ -38,6 +38,8 @@
 
 #include "opcode_metadata.h"      // _PyOpcode_opcode_metadata, _PyOpcode_num_popped/pushed
 
+#include "py_llvm.h"
+
 #define DEFAULT_CODE_SIZE 128
 #define DEFAULT_LNOTAB_SIZE 16
 #define DEFAULT_CNOTAB_SIZE 32
@@ -570,6 +572,7 @@ new_compiler(mod_ty mod, PyObject *filename, PyCompilerFlags *pflags,
         compiler_free(c);
         return NULL;
     }
+    initialize_llvm();
     return c;
 }
 
@@ -1711,6 +1714,8 @@ compiler_body(struct compiler *c, location loc, asdl_stmt_seq *stmts)
 static int
 compiler_codegen(struct compiler *c, mod_ty mod)
 {
+    use_llvm();
+
     _Py_DECLARE_STR(anon_module, "<module>");
     RETURN_IF_ERROR(
         compiler_enter_scope(c, &_Py_STR(anon_module), COMPILER_SCOPE_MODULE,
