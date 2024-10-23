@@ -23,7 +23,7 @@ ROOT = os.path.join(HERE, "../..")
 THIS = os.path.relpath(__file__, ROOT).replace(os.path.sep, posixpath.sep)
 
 DEFAULT_INPUT = os.path.relpath(os.path.join(ROOT, "Python/bytecodes.c"))
-DEFAULT_OUTPUT = os.path.relpath(os.path.join(ROOT, "Python/generated_macro.c"))
+DEFAULT_OUTPUT = os.path.relpath(os.path.join(ROOT, "Python/generated_macro.h"))
 DEFAULT_METADATA_OUTPUT = os.path.relpath(
     os.path.join(ROOT, "Python/opcode_metadata.h")
 )
