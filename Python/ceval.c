@@ -650,6 +650,8 @@ static inline void _Py_LeaveRecursiveCallPy(PyThreadState *tstate)  {
  * so consume 3 units of C stack */
 #define PY_EVAL_C_STACK_UNITS 2
 
+#include "generated_macro.c.h"
+
 PyObject* _Py_HOT_FUNCTION
 _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int throwflag)
 {
@@ -723,6 +725,14 @@ _PyEval_EvalFrameDefault(PyThreadState *tstate, _PyInterpreterFrame *frame, int 
         /* TO DO -- Monitor throw entry. */
         goto resume_with_error;
     }
+
+    size_t buffer_size = 1024;
+    char *buffer = malloc(buffer_size);
+    // ヘッダー部分の書き込み
+    int written = snprintf(buffer, buffer_size,
+        ""
+    );
+    size_t pos = written;
 
     /* Local "register" variables.
      * These are cached values from the frame and code object.  */

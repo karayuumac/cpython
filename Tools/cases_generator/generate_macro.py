@@ -23,7 +23,7 @@ ROOT = os.path.join(HERE, "../..")
 THIS = os.path.relpath(__file__, ROOT).replace(os.path.sep, posixpath.sep)
 
 DEFAULT_INPUT = os.path.relpath(os.path.join(ROOT, "Python/bytecodes.c"))
-DEFAULT_OUTPUT = os.path.relpath(os.path.join(ROOT, "Python/generated_macro.h"))
+DEFAULT_OUTPUT = os.path.relpath(os.path.join(ROOT, "Python/generated_macro.c.h"))
 DEFAULT_METADATA_OUTPUT = os.path.relpath(
     os.path.join(ROOT, "Python/opcode_metadata.h")
 )
@@ -149,7 +149,7 @@ class Formatter:
     def set_lineno(self, lineno: int, filename: str) -> None:
         if self.emit_line_directives:
             if lineno != self.nominal_lineno or filename != self.nominal_filename:
-                self.emit(f'#line {lineno} "{filename}" \\')
+                self.emit(f'\"#line {lineno} "{filename}"\"')
                 self.nominal_lineno = lineno
                 self.nominal_filename = filename
 
@@ -166,15 +166,15 @@ class Formatter:
     @contextlib.contextmanager
     def block(self, head: str, eod = False):
         if head:
-            self.emit(head + " { \\")
+            self.emit(head + " {")
         else:
-            self.emit("{ \\")
+            self.emit("\"{\"")
         with self.indent():
             yield
         if eod:
             self.emit("}")
         else:
-            self.emit("} \\")
+            self.emit("\"}\"")
 
     def stack_adjust(
         self,
@@ -187,13 +187,13 @@ class Formatter:
         grow, osym = list_effect_size(output_effects)
         diff += grow - shrink
         if isym and isym != osym:
-            self.emit(f"STACK_SHRINK({isym}); \\")
+            self.emit(f"\"STACK_SHRINK({isym});\"")
         if diff < 0:
-            self.emit(f"STACK_SHRINK({-diff}); \\")
+            self.emit(f"\"STACK_SHRINK({-diff});\"")
         if diff > 0:
-            self.emit(f"STACK_GROW({diff}); \\")
+            self.emit(f"\"STACK_GROW({diff});\"")
         if osym and osym != isym:
-            self.emit(f"STACK_GROW({osym}); \\")
+            self.emit(f"\"STACK_GROW({osym});\"")
 
     def declare(self, dst: StackEffect, src: StackEffect | None):
         if dst.name == UNUSED:
@@ -207,7 +207,7 @@ class Formatter:
         else:
             init = ""
         sepa = "" if typ.endswith("*") else " "
-        self.emit(f"{typ}{sepa}{dst.name}{init}; \\")
+        self.emit(f"\"{typ}{sepa}{dst.name}{init};\"")
 
     def assign(self, dst: StackEffect, src: StackEffect):
         if src.name == UNUSED:
@@ -222,7 +222,7 @@ class Formatter:
             stmt = f"{dst.name} = {cast}{src.name};"
             if src.cond:
                 stmt = f"if ({src.cond}) {{ {stmt} }}"
-            self.emit(stmt + " \\")
+            self.emit("\"" + stmt + "\"")
 
     def cast(self, dst: StackEffect, src: StackEffect) -> str:
         return f"({dst.type or 'PyObject *'})" if src.type != dst.type else ""
@@ -254,6 +254,9 @@ class Instruction:
     family: parser.Family | None = None
     predicted: bool = False
 
+    # variable
+    is_oparg_used = False
+
     def __init__(self, inst: parser.InstDef):
         self.inst = inst
         self.kind = inst.kind
@@ -279,6 +282,7 @@ class Instruction:
         self.unmoved_names = frozenset(unmoved_names)
         if variable_used(inst, "oparg"):
             fmt = "IB"
+            self.is_oparg_used = True
         else:
             fmt = "IX"
         cache = "C"
@@ -295,8 +299,8 @@ class Instruction:
             if self.name == family.members[0]:
                 if cache_size := family.size:
                     out.emit(
-                        f"static_assert({cache_size} == "
-                        f'{self.cache_offset}, "incorrect cache size"); \\'
+                        f"\"static_assert({cache_size} == "
+                        f'{self.cache_offset}, \\"incorrect cache size\\");\"'
                     )
 
         # Write input stack effect variable declarations and initializations
@@ -364,7 +368,7 @@ class Instruction:
 
         # Write cache effect
         if self.cache_offset:
-            out.emit(f"next_instr += {self.cache_offset}; \\")
+            out.emit(f"\"next_instr += {self.cache_offset};\"")
 
     def write_body(self, out: Formatter, dedent: int, cache_adjust: int = 0) -> bool:
         """Write the instruction body."""
@@ -384,7 +388,7 @@ class Instruction:
                     typ = f"uint{bits}_t "
                     func = f"read_u{bits}"
                 out.emit(
-                    f"{typ}{ceffect.name} = {func}(&next_instr[{cache_offset}].cache); \\"
+                    f"\"{typ}{ceffect.name} = {func}(&next_instr[{cache_offset}].cache);\""
                 )
             cache_offset += ceffect.size
         assert cache_offset == self.cache_offset + cache_adjust
@@ -404,10 +408,9 @@ class Instruction:
             out.set_lineno(self.block_line + offset, filename)
             offset += 1
 
-            if in_comment:
-                in_comment = False
-                str = buff.pop()
-                buff.append(str[:-3] + " */ \\\n")
+            line = line.replace("\"", "\\\"")
+            # TODO: %d と干渉するので一旦置き換える
+            line = line.replace("%", "%%")
 
             if m := re.match(r"(\s*)ERROR_IF\((.+), (\w+)\);\s*(?://.*)?$", line):
                 space, cond, label = m.groups()
@@ -428,10 +431,10 @@ class Instruction:
                     label = f"pop_{ninputs}_{label}"
                 if symbolic:
                     buff.append(
-                        f"{space}if ({cond}) {{ STACK_SHRINK({symbolic}); goto {label}; }} \\\n"
+                        f"\"{space}if ({cond}) {{ STACK_SHRINK({symbolic}); goto {label}; }}\"\n"
                     )
                 else:
-                    buff.append(f"{space}if ({cond}) goto {label}; \\\n")
+                    buff.append(f"\"{space}if ({cond}) goto {label};\"\n")
             elif m := re.match(r"(\s*)DECREF_INPUTS\(\);\s*(?://.*)?$", line):
                 out.reset_lineno()
                 space = extra + m.group(1)
@@ -440,24 +443,18 @@ class Instruction:
                         continue
                     if ieff.size:
                         buff.append(
-                            f"{space}for (int _i = {ieff.size}; --_i >= 0;) {{ \\\n"
+                            f"\"{space}for (int _i = {ieff.size}; --_i >= 0;) {{\"\n"
                         )
-                        buff.append(f"{space}    Py_DECREF({ieff.name}[_i]); \\\n")
-                        buff.append(f"{space}}} \\\n")
+                        buff.append(f"\"{space}    Py_DECREF({ieff.name}[_i]);\"\n")
+                        buff.append(f"\"{space}}}\"\n")
                     else:
                         decref = "XDECREF" if ieff.cond else "DECREF"
-                        buff.append(f"{space}Py_{decref}({ieff.name}); \\\n")
+                        buff.append(f"\"{space}Py_{decref}({ieff.name});\"\n")
+            elif re.match(".*oparg.*", line):
+                line = line.replace("oparg", "%d")
+                buff.append("\"" + extra + line[:-1] + "\"\n")
             else:
-                if re.match(r".*//.*", line):
-                    if not in_comment:
-                        line = line.replace("//", "/*")
-                        in_comment = True
-                    buff.append(extra + line[:-1] + " \\\n")
-                else:
-                    buff.append(extra + line[:-1] + " \\\n")
-        if in_comment:
-            str = buff.pop()
-            buff.append(str[:-3] + " */ \\\n")
+                buff.append("\"" + extra + line[:-1] + "\"\n")
         for ln in buff:
             out.write_raw(ln)
         out.reset_lineno()
@@ -473,7 +470,7 @@ class Component:
     input_mapping: StackEffectMapping
     output_mapping: StackEffectMapping
 
-    def write_body(self, out: Formatter, cache_adjust: int) -> None:
+    def write_body(self, out: Formatter, cache_adjust: int, oparg_alter = None) -> None:
         with out.block(""):
             input_names = {ieffect.name for _, ieffect in self.input_mapping}
             for var, ieffect in self.input_mapping:
@@ -1076,6 +1073,8 @@ class Analyzer:
             self.out.write_raw(self.from_source_files())
             self.out.write_raw(f"// Do not edit!\n")
 
+            self.out.write_raw("#pragma once\n")
+
             # Write and count instructions of all kinds
             n_instrs = 0
             n_supers = 0
@@ -1114,29 +1113,34 @@ class Analyzer:
         self.out.emit("")
         if instr.inst.override:
             self.out.emit("// Override")
-        with self.out.block(f"#define OP_{name}", eod=True):
-            if instr.predicted:
-                self.out.emit(f"PREDICTED({name}); \\")
-            instr.write(self.out)
-            if not instr.always_exits:
-                for prediction in instr.predictions:
-                    self.out.emit(f"PREDICT({prediction}); \\")
-                if instr.check_eval_breaker:
-                    self.out.emit("CHECK_EVAL_BREAKER(); \\")
-                self.out.emit(f"DISPATCH(); \\")
+        args = "(" + ("int oparg, char* buffer, size_t pos, size_t buffer_size" if instr.is_oparg_used else "char* buffer, size_t pos, size_t buffer_size") + ")"
+        with self.out.block(f"inline void OP_{name}{args}", eod=True):
+            self.out.emit("snprintf(buffer + pos, buffer_size - pos" + ("," if len(instr.block_text) != 0 else ""))
+            if len(instr.block_text) != 0:
+                if instr.predicted:
+                    self.out.emit(f"\"PREDICTED({name});\"")
+                instr.write(self.out)
+                if not instr.always_exits:
+                    for prediction in instr.predictions:
+                        self.out.emit(f"\"PREDICT({prediction});\"")
+                    if instr.check_eval_breaker:
+                        self.out.emit("\"CHECK_EVAL_BREAKER();\"")
+            else:
+               self.out.emit(", \"\"")
+            self.out.emit((", oparg" if instr.is_oparg_used else "") + ");")
 
     def write_super(self, sup: SuperInstruction) -> None:
         """Write code for a super-instruction."""
-        with self.wrap_super_or_macro(sup):
+        with self.wrap_super_or_macro(sup, oparg_count=len(sup.parts)):
             first = True
+            ct = 0
             for comp in sup.parts:
-                if not first:
-                    self.out.emit("oparg = (next_instr++)->op.arg; \\")
                 # self.out.emit("next_instr += OPSIZE(opcode) - 1;")
                 first = False
-                comp.write_body(self.out, 0)
+                comp.write_body(self.out, 0, oparg_alter=f"oparg_{ct}")
                 if comp.instr.cache_offset:
                     self.out.emit(f"next_instr += {comp.instr.cache_offset};")
+                ct += 1
 
     def write_macro(self, mac: MacroInstruction) -> None:
         """Write code for a macro instruction."""
@@ -1163,11 +1167,11 @@ class Analyzer:
             ):
                 self.out.emit(
                     f"static_assert({cache_size} == "
-                    f'{cache_adjust}, "incorrect cache size");'
+                    f'{cache_adjust}, \\"incorrect cache size\\");'
                 )
 
     @contextlib.contextmanager
-    def wrap_super_or_macro(self, up: SuperOrMacroInstruction):
+    def wrap_super_or_macro(self, up: SuperOrMacroInstruction, oparg_count: int = 0):
         """Shared boilerplate for super- and macro instructions."""
         # TODO: Somewhere (where?) make it so that if one instruction
         # has an output that is input to another, and the variable names
@@ -1175,7 +1179,13 @@ class Analyzer:
         # that variable is declared with the right name and type in the
         # outer block, rather than trusting the compiler to optimize it.
         self.out.emit("")
-        with self.out.block(f"#define OP_{up.name}", eod=True):
+        args = ""
+        if oparg_count == 0:
+            args = f"inline void OP_{up.name}(char* buffer, size_t pos, size_t buffer_size)"
+        else:
+            args = f"inline void OP_{up.name}({', '.join(f'int oparg_{i}' for i in range(oparg_count))}, char* buffer, size_t pos, size_t buffer_size)"
+        with self.out.block(args, eod=True):
+            self.out.emit("snprintf(buffer + pos, buffer_size - pos,")
             for i, var in reversed(list(enumerate(up.stack))):
                 src = None
                 if i < up.initial_sp:
@@ -1191,7 +1201,10 @@ class Analyzer:
                 dst = StackEffect(f"stack_pointer[-{i}]", "")
                 self.out.assign(dst, var)
 
-            self.out.emit(f"DISPATCH(); \\")
+            if oparg_count == 0:
+                self.out.emit(");")
+            else:
+                self.out.emit(f", {', '.join(f'oparg_{i}' for i in range(oparg_count))});")
 
 
 def extract_block_text(block: parser.Block) -> tuple[list[str], bool, list[str], int]:

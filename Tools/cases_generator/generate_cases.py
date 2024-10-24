@@ -250,6 +250,9 @@ class Instruction:
     family: parser.Family | None = None
     predicted: bool = False
 
+    # variable
+    is_oparg_used = False
+
     def __init__(self, inst: parser.InstDef):
         self.inst = inst
         self.kind = inst.kind
@@ -275,6 +278,7 @@ class Instruction:
         self.unmoved_names = frozenset(unmoved_names)
         if variable_used(inst, "oparg"):
             fmt = "IB"
+            self.is_oparg_used = True
         else:
             fmt = "IX"
         cache = "C"
@@ -481,6 +485,7 @@ class SuperInstruction(SuperOrMacroInstruction):
 
     super: parser.Super
     parts: list[Component]
+    oparg_count: int
 
 
 @dataclasses.dataclass
@@ -758,13 +763,16 @@ class Analyzer:
         sp = initial_sp
         parts: list[Component] = []
         format = ""
+        oparg_count = 0
         for instr in components:
             part, sp = self.analyze_instruction(instr, stack, sp)
             parts.append(part)
             format += instr.instr_fmt
+            if instr.is_oparg_used:
+                oparg_count += 1
         final_sp = sp
         return SuperInstruction(
-            super.name, stack, initial_sp, final_sp, format, super, parts
+            super.name, stack, initial_sp, final_sp, format, super, parts, oparg_count
         )
 
     def analyze_macro(self, macro: parser.Macro) -> MacroInstruction:
@@ -1052,6 +1060,16 @@ class Analyzer:
             self.out.write_raw(self.from_source_files())
             self.out.write_raw(f"// Do not edit!\n")
 
+            self.out.write_raw("#define OPS(instr, ...) \\\n")
+            self.out.write_raw("    instr(buffer, pos, buffer_size); \\\n")
+            self.out.write_raw("\n")
+            self.out.write_raw("#define OP(instr, ...) \\\n")
+            self.out.write_raw("    OP_##instr(__VA_ARGS__ __VA_OPT__(,) buffer, pos, buffer_size); \\\n")
+            self.out.write_raw("\n")
+            self.out.write_raw("#define ARG(...) \\\n")
+            self.out.write_raw("    __VA_ARGS__ \\\n")
+            self.out.write_raw("\n")
+
             # Write and count instructions of all kinds
             n_instrs = 0
             n_supers = 0
@@ -1091,56 +1109,26 @@ class Analyzer:
         if instr.inst.override:
             self.out.emit("// Override")
         with self.out.block(f"TARGET({name})"):
-            if instr.predicted:
-                self.out.emit(f"PREDICTED({name});")
-            instr.write(self.out)
-            if not instr.always_exits:
-                for prediction in instr.predictions:
-                    self.out.emit(f"PREDICT({prediction});")
-                if instr.check_eval_breaker:
-                    self.out.emit("CHECK_EVAL_BREAKER();")
-                self.out.emit(f"DISPATCH();")
+            if instr.is_oparg_used:
+                self.out.emit(f"OP({name}, oparg);")
+            else:
+                self.out.emit(f"OP({name});")
+            self.out.emit(f"DISPATCH();")
 
     def write_super(self, sup: SuperInstruction) -> None:
         """Write code for a super-instruction."""
         with self.wrap_super_or_macro(sup):
-            first = True
-            for comp in sup.parts:
-                if not first:
-                    self.out.emit("oparg = (next_instr++)->op.arg;")
-                # self.out.emit("next_instr += OPSIZE(opcode) - 1;")
-                first = False
-                comp.write_body(self.out, 0)
-                if comp.instr.cache_offset:
-                    self.out.emit(f"next_instr += {comp.instr.cache_offset};")
+            args = "OP(" + sup.name + ", oparg"
+            for i in range(1, sup.oparg_count):
+                args += ", (oparg = (next_instr++)->op.arg)"
+            args += ");"
+            self.out.emit(args)
 
     def write_macro(self, mac: MacroInstruction) -> None:
         """Write code for a macro instruction."""
         last_instr: Instruction | None = None
         with self.wrap_super_or_macro(mac):
-            cache_adjust = 0
-            for part in mac.parts:
-                match part:
-                    case parser.CacheEffect(size=size):
-                        cache_adjust += size
-                    case Component() as comp:
-                        last_instr = comp.instr
-                        comp.write_body(self.out, cache_adjust)
-                        cache_adjust += comp.instr.cache_offset
-
-            if cache_adjust:
-                self.out.emit(f"next_instr += {cache_adjust};")
-
-            if (
-                last_instr
-                and (family := last_instr.family)
-                and mac.name == family.members[0]
-                and (cache_size := family.size)
-            ):
-                self.out.emit(
-                    f"static_assert({cache_size} == "
-                    f'{cache_adjust}, "incorrect cache size");'
-                )
+            self.out.emit("OP(" + mac.name + ");")
 
     @contextlib.contextmanager
     def wrap_super_or_macro(self, up: SuperOrMacroInstruction):
@@ -1152,21 +1140,7 @@ class Analyzer:
         # outer block, rather than trusting the compiler to optimize it.
         self.out.emit("")
         with self.out.block(f"TARGET({up.name})"):
-            for i, var in reversed(list(enumerate(up.stack))):
-                src = None
-                if i < up.initial_sp:
-                    src = StackEffect(f"stack_pointer[-{up.initial_sp - i}]", "")
-                self.out.declare(var, src)
-
             yield
-
-            # TODO: Use slices of up.stack instead of numeric values
-            self.out.stack_adjust(up.final_sp - up.initial_sp, [], [])
-
-            for i, var in enumerate(reversed(up.stack[: up.final_sp]), 1):
-                dst = StackEffect(f"stack_pointer[-{i}]", "")
-                self.out.assign(dst, var)
-
             self.out.emit(f"DISPATCH();")
 
 
