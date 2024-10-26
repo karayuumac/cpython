@@ -390,6 +390,11 @@ PYTHON_OBJS=	\
 		Python/formatter_unicode.o \
 		Python/fileutils.o \
 		Python/suggestions.o \
+		Python/jit.o \
+		Python/jit_trace.o \
+		Python/jit_debug.o \
+		Python/jit_cache.o \
+		Python/jit_guard.o \
 		Python/$(DYNLOADFILE) \
 		$(LIBOBJS) \
 		$(MACHDEP_OBJS) \
@@ -1103,6 +1108,8 @@ PYTHON_HEADERS= \
 		$(srcdir)/Include/unicodeobject.h \
 		$(srcdir)/Include/warnings.h \
 		$(srcdir)/Include/weakrefobject.h \
+		$(srcdir)/Include/jit.h \
+		$(srcdir)/Include/jit_internal.h \
 		\
 		pyconfig.h \
 		$(PARSER_HEADERS) \

@@ -264,6 +264,8 @@ UNSIGNAL_ASYNC_EXC(PyInterpreterState *interp)
 #include <errno.h>
 #endif
 #include "ceval_gil.h"
+#include "jit.h"
+#include "jit_internal.h"
 
 void _Py_NO_RETURN
 _Py_FatalError_TstateNULL(const char *func)
@@ -1303,7 +1305,8 @@ eval_frame_handle_pending(PyThreadState *tstate)
             goto tracing_dispatch; \
         } \
         f->f_lasti = INSTR_OFFSET(); \
-        NEXTOPARG(); \
+        NEXTOPARG();                                                   \
+                   \
         goto *opcode_targets[opcode]; \
     }
 #else

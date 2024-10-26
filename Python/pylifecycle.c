@@ -61,6 +61,9 @@ static PyStatus init_sys_streams(PyThreadState *tstate);
 static void wait_for_thread_shutdown(PyThreadState *tstate);
 static void call_ll_exitfuncs(_PyRuntimeState *runtime);
 
+extern int PyJIT_Initialize(void);
+extern void PyJIT_Finalize(void);
+
 int _Py_UnhandledKeyboardInterrupt = 0;
 
 /* The following places the `_PyRuntime` structure in a location that can be
@@ -1035,6 +1038,9 @@ pyinit_core(_PyRuntimeState *runtime,
         goto done;
     }
 
+    // JITコンパイラの初期化
+    PyJIT_Initialize();
+
 done:
     PyConfig_Clear(&config);
     return status;
@@ -1822,6 +1828,9 @@ Py_FinalizeEx(void)
 
     /* dump hash stats */
     _PyHash_Fini();
+
+    // JITコンパイラの終了処理
+    PyJIT_Finalize();
 
 #ifdef Py_REF_DEBUG
     if (show_ref_count) {
