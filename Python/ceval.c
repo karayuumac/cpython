@@ -1301,17 +1301,30 @@ eval_frame_handle_pending(PyThreadState *tstate)
 #define TARGET(op) op: TARGET_##op
 #define DISPATCH() \
     { \
+        if (!throwflag) { \
+            trace_t *trace = jit_find_trace(f->f_code, f->f_lasti); \
+            if (trace != NULL && trace->compiled_code != NULL) \
+            { \
+                if (jit_check_all_guards(trace, f)) \
+                { \
+                    PyObject *result = jit_execute_trace(tstate, f, trace); \
+                    if (result != NULL) \
+                    { \
+                        retval = result; \
+                        goto exit_eval_frame; \
+                    } \
+                } \
+            } \
+            PyJIT_CheckTraceHead(f); \
+            if (jit_context && jit_context->state == TRACE_RECORDING) { \
+                PyJIT_RecordTrace(f); \
+            } \
+        } \
         if (trace_info.cframe.use_tracing OR_DTRACE_LINE OR_LLTRACE) { \
             goto tracing_dispatch; \
         } \
         f->f_lasti = INSTR_OFFSET(); \
         NEXTOPARG();                                                   \
-        if (!throwflag) { \
-            PyJIT_CheckTraceHead(f); \
-            if (jit_context && jit_context->state == TRACE_RECORDING) { \
-                PyJIT_RecordTrace(f, (int)(stack_pointer - f->f_valuestack)); \
-            } \
-        } \
         goto *opcode_targets[opcode]; \
     }
 #else

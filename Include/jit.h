@@ -128,7 +128,7 @@ PyAPI_FUNC(void) PyJIT_Finalize(void);
 
 PyAPI_FUNC(int) PyJIT_CheckTraceHead(PyFrameObject *frame);
 
-PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame, int depth);
+PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame);
 
 PyAPI_FUNC(trace_t *) PyJIT_GetCurrentTrace(void);
 

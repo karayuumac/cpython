@@ -31,13 +31,25 @@ typedef struct jit_context {
 /// グローバルコンテキスト
 extern jit_context_t *jit_context;
 
+/// トレース実行用のコンテキスト
+typedef struct {
+  PyThreadState *tstate;
+  PyFrameObject *frame;
+  trace_t *trace;
+  PyObject **stack_pointer;
+  int error;
+} jit_execution_context_t;
+
+/// コンパイル済みコードの型定義
+typedef PyObject* (*jit_compiled_code_t)(jit_execution_context_t *ctx);
+
 // 内部関数
 int jit_init_context(void);
 void jit_free_context(void);
 int jit_start_recording(PyFrameObject *frame);
 void jit_stop_recoding(void);
 int jit_should_stop_recording(PyFrameObject *frame);
-void jit_record_instruction(PyFrameObject *frame, int depth);
+void jit_record_instruction(PyFrameObject *frame);
 int jit_is_support_opcode(int opcode);
 void jit_dump_trace(trace_t *trace);
 
@@ -51,5 +63,11 @@ int jit_cache_trace(trace_t *trace);
 trace_t *jit_find_trace(PyCodeObject *code, int offset);
 int jit_remove_trace(PyCodeObject *code, int offset);
 void jit_clear_trace_cache(void);
+
+int jit_optimize_trace(trace_t *trace);
+int jit_compile_trace(trace_t *trace);
+PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace);
+int jit_check_all_guards(trace_t *trace, PyFrameObject *frame);
+int jit_check_guard(trace_guard_t *guard, PyObject *actual);
 
 #endif //CPYTHON_JIT_INTERNAL_H

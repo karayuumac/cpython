@@ -1110,6 +1110,7 @@ PYTHON_HEADERS= \
 		$(srcdir)/Include/weakrefobject.h \
 		$(srcdir)/Include/jit.h \
 		$(srcdir)/Include/jit_internal.h \
+		$(srcdir)/Include/jit_lir.h \
 		\
 		pyconfig.h \
 		$(PARSER_HEADERS) \

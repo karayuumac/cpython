@@ -23,8 +23,8 @@ def analyze_traces():
 def main():
     # まずホットトレースを生成
     points = [Point(1.0, 1.0), Point(2.0, 3.0)]
-    for _ in range(100):
-        process_points(points, 1)
+    for _ in range(1000):
+        process_points(points, 100)
 
     # トレース分析を実行
     analyze_traces()
