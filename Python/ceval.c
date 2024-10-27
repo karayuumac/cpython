@@ -1306,7 +1306,12 @@ eval_frame_handle_pending(PyThreadState *tstate)
         } \
         f->f_lasti = INSTR_OFFSET(); \
         NEXTOPARG();                                                   \
-                   \
+        if (!throwflag) { \
+            PyJIT_CheckTraceHead(f); \
+            if (jit_context && jit_context->state == TRACE_RECORDING) { \
+                PyJIT_RecordTrace(f, (int)(stack_pointer - f->f_valuestack)); \
+            } \
+        } \
         goto *opcode_targets[opcode]; \
     }
 #else

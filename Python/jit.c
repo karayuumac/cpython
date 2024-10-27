@@ -42,7 +42,6 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
   }
 
   // バックワードジャンプをチェック
-  int backward_jump = 0;
   int offset = frame->f_lasti;
   PyCodeObject *code = frame->f_code;
 
@@ -65,12 +64,10 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
     case POP_JUMP_IF_TRUE:
     case JUMP_IF_FALSE_OR_POP:
     case JUMP_IF_TRUE_OR_POP:
-      printf("backward!\n");
       is_backward_jump = oparg < offset;
       break;
 
     case FOR_ITER:
-      printf("backward!\n");
       // FOR_ITERはジャンプ先が現在位置 + oparg + 2 となる
       is_backward_jump = (offset + oparg + 2) < offset;
       break;
@@ -99,7 +96,7 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
 }
 
 /// トレースの記録
-int PyJIT_RecordTrace(PyFrameObject *frame) {
+int PyJIT_RecordTrace(PyFrameObject *frame, const int depth) {
   if (jit_context == NULL || jit_context->state != TRACE_RECORDING || jit_context->current_trace == NULL) {
     return 0;
   }
@@ -111,6 +108,6 @@ int PyJIT_RecordTrace(PyFrameObject *frame) {
   }
 
   // 命令を記録
-  jit_record_instruction(frame);
+  jit_record_instruction(frame, depth);
   return 0;
 }

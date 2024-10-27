@@ -268,7 +268,7 @@ void jit_stop_recoding(void) {
 }
 
 /// 命令の記録
-void jit_record_instruction(PyFrameObject *frame) {
+void jit_record_instruction(PyFrameObject *frame, const int depth) {
   trace_t *trace = jit_context->current_trace;
   if (trace == NULL) {
     return;
@@ -294,7 +294,7 @@ void jit_record_instruction(PyFrameObject *frame) {
   // 基本情報の記録
   inst->opcode = bytecode[offset];
   inst->oparg = bytecode[offset + 1];
-  inst->stack_depth = frame->f_stackdepth;
+  inst->stack_depth = depth;
 
   // スタック情報のコピー
   inst->stack_values = PyMem_Malloc(sizeof(PyObject *) * inst->stack_depth);
@@ -310,6 +310,7 @@ void jit_record_instruction(PyFrameObject *frame) {
   for (int i = 0; i < inst->stack_depth; i++) {
     PyObject *obj = frame->f_valuestack[i];
     Py_XINCREF(obj);
+    inst->stack_values[i] = obj;
     inst->stack_types[i] = obj ? Py_TYPE(obj) : NULL;
   }
 
@@ -341,6 +342,9 @@ void jit_record_instruction(PyFrameObject *frame) {
       Py_INCREF(local);
       break;
     }
+
+    default:
+      break;
   }
   
   trace->buffer.length++;
@@ -363,12 +367,14 @@ int jit_should_stop_recording(PyFrameObject *frame) {
   if (frame->f_lasti == trace->start_offset && trace->buffer.length > 0) {
     return 1;
   }
-  
+
+  /*
   // 命令がサポート外である場合
   unsigned char opcode = PyBytes_AS_STRING(frame->f_code->co_code)[frame->f_lasti];
   if (!jit_is_support_opcode(opcode)) {
     return 1;
   }
+  */
   
   // 例外が発生した場合
   if (PyErr_Occurred()) {

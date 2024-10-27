@@ -37,7 +37,7 @@ void jit_free_context(void);
 int jit_start_recording(PyFrameObject *frame);
 void jit_stop_recoding(void);
 int jit_should_stop_recording(PyFrameObject *frame);
-void jit_record_instruction(PyFrameObject *frame);
+void jit_record_instruction(PyFrameObject *frame, int depth);
 int jit_is_support_opcode(int opcode);
 void jit_dump_trace(trace_t *trace);
 
