@@ -93,6 +93,8 @@ typedef enum
   LIR_GETGLOBAL,
   /// グローバル変数設定
   LIR_SETGLOBAL,
+  /// メソッド呼び出し
+  LIR_CALL,
 
   /// スタックプッシュ
   LIR_PUSH,
@@ -166,9 +168,7 @@ typedef struct lir_inst
   lir_operand_t src1;
   lir_operand_t src2;
   /// 次の命令へのリンク
-  struct lir_insn *next;
-  /// 対応するバイトコードのPC
-  int pc;
+  struct lir_inst *next;
   /// ガード失敗時の分岐先
   struct trace *guard_exit;
 } lir_inst_t;
@@ -198,7 +198,7 @@ typedef struct
   /// ラベル数
   int label_count;
   /// 定数プール
-  PyObject **constant;
+  PyObject **constants;
   /// 定数の数
   int const_count;
 } lir_code_t;
@@ -220,5 +220,14 @@ lir_operand_t lir_exit_operand(struct trace *exit);
 lir_operand_t lir_type_operand(PyTypeObject *type);
 lir_operand_t lir_method_operand(PyObject *method);
 lir_operand_t lir_label_operand(int label);
+
+/// トレースからLIRへの変換
+lir_code_t *generate_lir(trace_t *trace);
+
+/// コード生成
+char* generate_c_code(lir_code_t* lir, trace_t* trace);
+
+/// コンパイル
+int jit_compile_trace(trace_t* trace);
 
 #endif //CPYTHON_JIT_LIR_H

@@ -1,0 +1,147 @@
+//
+// Created by root on 24/10/28.
+//
+
+#include "jit_runtime.h"
+#include <dlfcn.h>
+
+#ifndef JIT_INCLUDE_PATHS
+#error "JIT_INCLUDE_PATHS is not defined. Check your Makefile."
+#endif
+
+
+
+char* generate_c_code(lir_code_t* lir, trace_t* trace)
+{
+  static char code[65536];
+  char* p = code;
+
+  // ヘッダーとインクルード
+  p += sprintf(p,
+               "#include \"jit_runtime.h\"\n"
+               "\n"
+               "PyObject* trace_func(jit_execution_context_t* ctx) {\n");
+
+  // レジスタ変数の宣言
+  for (int i = 0; i < lir->reg_count; i++)
+  {
+    p += sprintf(p, "    PyObject* v%d = NULL;\n", i);
+  }
+  p += sprintf(p, "\n");
+
+  // LIR命令をランタイム関数呼び出しに変換
+  lir_block_t* block = lir->entry;
+  while (block)
+  {
+    p += sprintf(p, "L%d:\n", block->label);
+
+    lir_inst_t* insn = block->first;
+    while (insn)
+    {
+      switch (insn->opcode)
+      {
+      case LIR_ADD:
+        p += sprintf(p,
+                     "    v%d = jit_binary_add(v%d, v%d);\n"
+                     "    if (v%d == NULL) goto error;\n",
+                     insn->dest.u.reg_num,
+                     insn->src1.u.reg_num,
+                     insn->src2.u.reg_num,
+                     insn->dest.u.reg_num);
+        break;
+
+      case LIR_GUARD_TYPE:
+        p += sprintf(p,
+                     "    if (!jit_check_type(v%d, %s)) {\n"
+                     "        ctx->error = GUARD_ERROR_TYPE;\n"
+                     "        ctx->exit_trace = %p;\n"
+                     "        goto side_exit;\n"
+                     "    }\n",
+                     insn->src1.u.reg_num,
+                     insn->src2.u.type->tp_name,
+                     insn->guard_exit);
+        break;
+
+      // TODO: その他命令に対する命令の処理を追加
+      }
+      insn = insn->next;
+    }
+    block = block->next;
+  }
+
+  p += sprintf(p,
+               "    return v%d;\n"
+               "error:\n"
+               "    ctx->error = 1;\n"
+               "    return NULL;\n"
+               "side_exit:\n"
+               "    return NULL;\n"
+               "}\n",
+               lir->reg_count - 1);
+
+  return code;
+}
+
+int jit_compile_trace(trace_t* trace)
+{
+  // LIRの生成
+  lir_code_t* lir = generate_lir(trace);
+  if (!lir) return -1;
+
+  // Cコードの生成
+  char* trace_code = generate_c_code(lir, trace);
+  if (!trace_code)
+  {
+    lir_free(lir);
+    return -1;
+  }
+
+  // ソースコードを一時ファイルに書き出し
+  FILE* f = fopen("/tmp/trace.c", "w");
+  if (!f)
+  {
+    lir_free(lir);
+    return -1;
+  }
+  fputs(trace_code, f);
+  fclose(f);
+
+  // コンパイルコマンドの生成
+  char compile_cmd[1024];
+  snprintf(compile_cmd, sizeof(compile_cmd),
+        "cc -O2 -fPIC -shared %s "
+        "/tmp/trace.c -o /tmp/trace.so", JIT_INCLUDE_PATHS);
+
+  // コンパイル実行
+  int result = system(compile_cmd);
+  if (result != 0)
+  {
+    printf("Compilation failed: %s\n", compile_cmd); // デバッグ用
+    lir_free(lir);
+    return -1;
+  }
+
+  // 動的ライブラリをロード
+  void* handle = dlopen("/tmp/trace.so", RTLD_NOW);
+  if (!handle)
+  {
+    printf("dlopen error: %s\n", dlerror()); // デバッグ用
+    lir_free(lir);
+    return -1;
+  }
+
+  // コンパイル済み関数を取得
+  jit_compiled_code_t func = dlsym(handle, "trace_func");
+  if (!func)
+  {
+    dlclose(handle);
+    lir_free(lir);
+    return -1;
+  }
+
+  // トレースにコンパイル済みコードを設定
+  trace->compiled_code = PyCapsule_New(func, "compiled_code", NULL);
+
+  lir_free(lir);
+  return 1;
+}
