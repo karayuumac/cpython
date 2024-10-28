@@ -395,6 +395,7 @@ PYTHON_OBJS=	\
 		Python/jit_debug.o \
 		Python/jit_cache.o \
 		Python/jit_guard.o \
+		Python/jit_lir.o \
 		Python/$(DYNLOADFILE) \
 		$(LIBOBJS) \
 		$(MACHDEP_OBJS) \

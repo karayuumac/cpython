@@ -7,6 +7,7 @@
 
 #include "Include/Python.h"
 #include "jit.h"
+#include "jit_lir.h"
 
 // トレース情報の設定
 /// 最大トレース長
