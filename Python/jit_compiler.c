@@ -97,6 +97,12 @@ lir_code_t* generate_lir(trace_t* trace)
         break;
       }
 
+    case BINARY_SUBTRACT:
+      {
+        // オーバーフローチェック
+        lir_
+      }
+
     case BINARY_MULTIPLY:
       {
         // オーバーフローチェック

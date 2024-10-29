@@ -445,13 +445,12 @@ int jit_should_stop_recording(PyFrameObject* frame)
         return 1;
     }
 
-  /*
-  // 命令がサポート外である場合
-  unsigned char opcode = PyBytes_AS_STRING(frame->f_code->co_code)[frame->f_lasti];
-  if (!jit_is_support_opcode(opcode)) {
-    return 1;
-  }
-  */
+    // 命令がサポート外である場合
+    unsigned char opcode = PyBytes_AS_STRING(frame->f_code->co_code)[frame->f_lasti];
+    if (!jit_is_support_opcode(opcode))
+    {
+        return 1;
+    }
 
     // 例外が発生した場合
     if (PyErr_Occurred())
@@ -472,19 +471,16 @@ int jit_is_support_opcode(int opcode)
     case BINARY_MULTIPLY:
     case BINARY_TRUE_DIVIDE:
     case BINARY_FLOOR_DIVIDE:
-    case BINARY_MODULO:
-    case BINARY_POWER:
-    case UNARY_NEGATIVE:
-    case UNARY_POSITIVE:
-    case UNARY_NOT:
+    // case BINARY_MODULO:
+    // case BINARY_POWER:
+    case COMPARE_OP:
     case JUMP_ABSOLUTE:
-    case JUMP_IF_TRUE_OR_POP:
-    case JUMP_IF_FALSE_OR_POP:
+    case POP_JUMP_IF_TRUE:
+    case POP_JUMP_IF_FALSE:
     case LOAD_FAST:
     case STORE_FAST:
-    case LOAD_CONST:
-    case LOAD_GLOBAL:
-    case COMPARE_OP:
+    case LOAD_METHOD:
+    case CALL_METHOD:
         return 1;
     default:
         return 0;
@@ -533,13 +529,15 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
 
             // 新しいトレースの記録を開始する
             trace_t* new_trace = jit_create_trace(frame);
-            if (new_trace == NULL) {
+            if (new_trace == NULL)
+            {
                 return NULL;
             }
 
             // カウンタの設定
             new_trace->counter = jit_get_counter(frame->f_code, frame->f_lasti);
-            if (new_trace->counter == NULL) {
+            if (new_trace->counter == NULL)
+            {
                 jit_free_trace(new_trace);
                 return NULL;
             }

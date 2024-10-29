@@ -26,7 +26,6 @@ static int jit_check_type(PyObject* obj, PyTypeObject* type) {
 }
 
 static int jit_check_overflow_add(PyObject* a, PyObject* b) {
-  if (!PyLong_Check(a) || !PyLong_Check(b)) return 0;
   long va = PyLong_AsLong(a);
   long vb = PyLong_AsLong(b);
   return (va > 0 && vb > 0 && va > LONG_MAX - vb);
