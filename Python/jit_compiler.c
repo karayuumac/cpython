@@ -48,7 +48,7 @@ lir_code_t* generate_lir(trace_t* trace)
             guard_inst = lir_new_inst(LIR_GUARD_TYPE);
             guard_inst->src1 = lir_stack_operand(guard->stack_index);
             int const_idx = lir_add_constant(lir, guard->expected.value);
-            guard_inst->src2 = lir_const_operand(const_idx);
+            guard_inst->src2 = lir_heap_operand(const_idx);
           }
         }
 
@@ -63,6 +63,34 @@ lir_code_t* generate_lir(trace_t* trace)
     // 命令の変換
     switch (inst->opcode)
     {
+    case LOAD_CONST:
+      lir_inst_t* load_const = lir_new_inst(LIR_CONST);
+      load_const->dest = lir_reg_operand(lir->reg_count++);
+      load_const->src1 = lir_heap_operand(inst->oparg);
+      lir_append_inst(lir->current, load_const);
+      break;
+
+    case STORE_NAME:
+      // スタックから値をロードする
+      lir_inst_t* load_value = lir_new_inst(LIR_LOAD_STACK);
+      load_value->dest = lir_reg_operand(lir->reg_count++);
+      load_value->src1 = lir_stack_operand(inst->stack_depth - 1); // スタックトップ
+      lir_append_inst(lir->current, load_value);
+
+      // co_names から名前をロードする
+      lir_inst_t *load_name = lir_new_inst(LIR_LOAD_NAME);
+      load_name->dest = lir_reg_operand(lir->reg_count++);
+      load_name->src1 = lir_heap_operand(inst->oparg);
+      lir_append_inst(lir->current, load_name);
+
+      // 値の格納
+      lir_inst_t *store = lir_new_inst(LIR_STORE_NAME);
+      store->src1 = load_name->dest,
+      store->src2 = load_value->dest,
+      lir_append_inst(lir->current, store);
+      break;
+
+      /*
     case LOAD_FAST:
       {
         lir_inst_t* load = lir_new_inst(LIR_LOAD);
@@ -206,6 +234,11 @@ lir_code_t* generate_lir(trace_t* trace)
         lir->current = next;
         break;
       }
+      */
+
+    default:
+      lir_inst_t* nop = lir_new_inst(LIR_NOPE);
+      lir_append_inst(lir->current, nop);
 
       // TODO: その他命令の追加
     }

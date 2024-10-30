@@ -46,6 +46,19 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
   int offset = frame->f_lasti;
   PyCodeObject *code = frame->f_code;
 
+  // 既存のトレースを検索
+  trace_t *existing_trace = jit_find_trace(code, offset);
+  if (existing_trace != NULL)
+  {
+    // 既存のトレースのガード条件のチェック
+    if (jit_check_all_guards(existing_trace, frame))
+    {
+      // 既存トレースを実行
+      jit_execute_trace(PyThreadState_Get(), frame, existing_trace);
+      return 0;
+    }
+  }
+
   // バイトコードの取得
   _Py_CODEUNIT *instructions = (_Py_CODEUNIT *)PyBytes_AS_STRING(code->co_code);
   if (instructions == NULL) {
@@ -66,11 +79,6 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
     case JUMP_IF_FALSE_OR_POP:
     case JUMP_IF_TRUE_OR_POP:
       is_backward_jump = oparg < offset;
-      break;
-
-    case FOR_ITER:
-      // FOR_ITERはジャンプ先が現在位置 + oparg + 2 となる
-      is_backward_jump = (offset + oparg + 2) < offset;
       break;
 
     default:

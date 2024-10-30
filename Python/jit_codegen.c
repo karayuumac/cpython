@@ -4,14 +4,41 @@
 
 #include "jit_runtime.h"
 #include <dlfcn.h>
+#include <opcode.h>
 
 #ifndef JIT_INCLUDE_PATHS
 #error "JIT_INCLUDE_PATHS is not defined. Check your Makefile."
 #endif
 
+/*
+char* generate_operand_code(lir_operand_t *operand)
+{
+  static char code[65536];
+  char* p = code;
 
+  switch (operand->kind)
+  {
+  case OPERAND_NONE:
+    p += sprintf(p, "");
+    break;
 
-char* generate_c_code(lir_code_t* lir, trace_t* trace)
+  case OPERAND_CONST:
+    p += sprintf(p, "ctx->frame->f_code->const[%d]", operand->u.const_index);
+    break;
+
+  case OPERAND_REG:
+    p += sprintf(p, "v%d", operand->u.reg_num);
+
+  default:
+    p += sprintf(p, "");
+    break;
+  }
+
+  return p;
+}
+*/
+
+char* generate_c_code(lir_code_t* lir, trace_t *trace)
 {
   static char code[65536];
   char* p = code;
@@ -37,22 +64,68 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
   {
     p += sprintf(p, "L%d:\n", block->label);
 
-    lir_inst_t* insn = block->first;
-    while (insn)
+    lir_inst_t* inst = block->first;
+    while (inst)
     {
-      switch (insn->opcode)
+      switch (inst->opcode)
       {
-      case LIR_LOAD:
+      case LIR_CONST:
+        p += sprintf(p,
+          "v%d = ctx->frame->f_code->const[%d];\n",
+          inst->dest.u.reg_num,
+          inst->src1.u.heap_index
+        );
+        break;
+
+      case LIR_LOAD_NAME:
+        p += sprintf(p,
+          "v%d = ctx->frame->f_code->names[%d];\n",
+          inst->dest.u.reg_num,
+          inst->src1.u.heap_index
+        );
+        break;
+
+
+      case LIR_STORE_NAME:
+        p += sprintf(p,
+          "{\n"
+          "    PyObject *name = v%d;\n"
+          "    PyObject *value = v%d;\n"
+          "    PyObject *ns = ctx->frame->f_locals;\n"
+          "    int err;\n"
+          "    if (ns == NULL) {\n"
+          "        goto error;\n"
+          "    }\n"
+          "    if (PyDict_CheckExact(ns))\n"
+          "        err = PyDict_SetItem(ns, name, v);\n"
+          "    else\n"
+          "        err = PyObject_SetItem(ns, name, v);\n"
+          "    Py_DECREF(value);\n"
+          "    if (err != 0)\n"
+          "        goto error;\n"
+          "    }\n"
+          "}\n",
+          inst->src1.u.reg_num,
+          inst->src2.u.reg_num
+        );
+
+      case LIR_LOAD_STACK:
         assert(insn->src1.kind == OPERAND_STACK);
         p += sprintf(p,
           "    {\n"
           "        v%d = ctx->frame->f_valuestack[%d];\n"
           "        Py_INCREF(v%d);\n"
           "    }\n",
-          insn->dest.u.reg_num,
-          insn->src1.u.stack_pos,
-          insn->dest.u.reg_num
+          inst->dest.u.reg_num,
+          inst->src1.u.stack_pos,
+          inst->dest.u.reg_num
           );
+
+      default:
+        break;
+
+        /*
+
       case LIR_ADD:
         p += sprintf(p,
                      "    v%d = jit_binary_add(v%d, v%d);\n"
@@ -74,10 +147,11 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
                      insn->src2.u.type->tp_name,
                      insn->guard_exit);
         break;
+        */
 
       // TODO: その他命令に対する命令の処理を追加
       }
-      insn = insn->next;
+      inst = inst->next;
     }
     block = block->next;
   }
@@ -114,6 +188,9 @@ int jit_compile_trace(trace_t* trace)
     lir_free(lir);
     return -1;
   }
+
+  printf("generated code:\n");
+  printf(trace_code);
 
   // ソースコードを一時ファイルに書き出し
   FILE* f = fopen("/tmp/trace.c", "w");

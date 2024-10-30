@@ -483,7 +483,10 @@ int jit_is_support_opcode(int opcode)
     // case STORE_FAST:
     // case LOAD_METHOD:
     // case CALL_METHOD:
+    case FOR_ITER:
+    case STORE_NAME:
     case LOAD_CONST:
+    case JUMP_ABSOLUTE:
         return 1;
     default:
         return 0;

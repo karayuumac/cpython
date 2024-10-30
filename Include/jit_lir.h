@@ -15,10 +15,12 @@ typedef enum
   LIR_NOPE,
   /// 定数ロード
   LIR_CONST,
+  /// 名前ロード
+  LIR_LOAD_NAME,
   /// 変数ロード
-  LIR_LOAD,
+  LIR_LOAD_STACK,
   /// 変数ストア
-  LIR_STORE,
+  LIR_STORE_NAME,
 
   /// 整数加算
   LIR_ADD,
@@ -125,9 +127,9 @@ typedef struct
   enum
   {
     OPERAND_NONE,
-    /// 定数
-    OPERAND_CONST,
-    /// レジスタ変数
+    /// ヒープ領域位置
+    OPERAND_HEAP,
+    /// レジスタ変数位置
     OPERAND_REG,
     /// スタック位置
     OPERAND_STACK,
@@ -143,8 +145,8 @@ typedef struct
 
   union
   {
-    /// 定数値
-    PyObject* const_val;
+    /// 定数配列のインデックス
+    int heap_index;
     /// レジスタ番号
     int reg_num;
     /// スタック位置
@@ -216,13 +218,15 @@ int lir_add_constant(lir_code_t *lir, PyObject *const_var);
 
 // オペランド生成関数
 lir_operand_t lir_none_operand(void);
-lir_operand_t lir_const_operand(int const_index);
+lir_operand_t lir_heap_operand(int heap_index);
 lir_operand_t lir_reg_operand(int reg_num);
 lir_operand_t lir_stack_operand(int stack_pos);
 lir_operand_t lir_exit_operand(struct trace *exit);
 lir_operand_t lir_type_operand(PyTypeObject *type);
 lir_operand_t lir_method_operand(PyObject *method);
 lir_operand_t lir_label_operand(int label);
+
+// char* generate_operand_code(lir_operand_t *operand);
 
 /// トレースからLIRへの変換
 lir_code_t *generate_lir(trace_t *trace);

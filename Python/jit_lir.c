@@ -147,10 +147,10 @@ lir_operand_t lir_none_operand(void)
   return op;
 }
 
-lir_operand_t lir_const_operand(int const_index)
+lir_operand_t lir_heap_operand(int heap_index)
 {
-  lir_operand_t op = { OPERAND_CONST };
-  op.u.reg_num = const_index;
+  lir_operand_t op = { OPERAND_HEAP };
+  op.u.heap_index = heap_index;
   return op;
 }
 
