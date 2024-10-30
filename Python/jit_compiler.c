@@ -2,6 +2,7 @@
 // Created by karayuu on 24/10/28.
 //
 #include "jit_lir.h"
+#include "opcode.h"
 #include <dlfcn.h>
 
 /// トレースからLIRへの変換
@@ -82,17 +83,26 @@ lir_code_t* generate_lir(trace_t* trace)
 
     case BINARY_ADD:
       {
+        // 型チェックガード
+        lir_inst_t *guard_type_1 = lir_new_inst(LIR_GUARD_TYPE_LL);
+        guard_type_1->src1 = lir_reg_operand(lir->reg_count - 2);
+        lir_append_inst(lir->current, guard_type_1);
+
+        lir_inst_t *guard_type_2 = lir_new_inst(LIR_GUARD_TYPE_LL);
+        guard_type_2->src1 = lir_reg_operand(lir->reg_count - 1);
+        lir_append_inst(lir->current, guard_type_2);
+
         // オーバーフローチェック
-        lir_inst_t* guard = lir_new_inst(LIR_GUARD_OVERFLOW);
-        guard->src1 = lir_reg_operand(lir->reg_count - 2);
-        guard->src2 = lir_reg_operand(lir->reg_count - 1);
-        lir_append_inst(lir->current, guard);
+        lir_inst_t* guard_overflow = lir_new_inst(LIR_GUARD_ADD_LL_OVERFLOW);
+        guard_overflow->src1 = lir_reg_operand(lir->reg_count - 2);
+        guard_overflow->src2 = lir_reg_operand(lir->reg_count - 1);
+        lir_append_inst(lir->current, guard_overflow);
 
         // 加算
         lir_inst_t* add = lir_new_inst(LIR_ADD);
         add->dest = lir_reg_operand(lir->reg_count++);
-        add->src1 = guard->src1;
-        add->src2 = guard->src2;
+        add->src1 = guard_overflow->src1;
+        add->src2 = guard_overflow->src2;
         lir_append_inst(lir->current, add);
         break;
       }
@@ -100,13 +110,13 @@ lir_code_t* generate_lir(trace_t* trace)
     case BINARY_SUBTRACT:
       {
         // オーバーフローチェック
-        lir_
+        // lir_
       }
 
     case BINARY_MULTIPLY:
       {
         // オーバーフローチェック
-        lir_inst_t* guard = lir_new_inst(LIR_GUARD_OVERFLOW);
+        lir_inst_t* guard = lir_new_inst(LIR_GUARD_MUL_LL_OVERFLOW);
         guard->src1 = lir_reg_operand(lir->reg_count - 2);
         guard->src2 = lir_reg_operand(lir->reg_count - 1);
         lir_append_inst(lir->current, guard);

@@ -7,8 +7,11 @@
 
 #include "Include/Python.h"
 #include "Include/frameobject.h"
-#include "Include/opcode.h"
 #include "Include/structmember.h"
+
+struct jit_execution_context;
+/// コンパイル済みコードの型定義
+typedef PyObject* (*jit_compiled_code_t)(struct jit_execution_context* ctx);
 
 /// トレース命令の情報を保持する構造体
 typedef struct trace_instruction {
@@ -76,7 +79,7 @@ typedef struct trace {
   } guard_conditions;
 
   /// コンパイル済みのネイティブコード
-  PyObject *compiled_code;
+  jit_compiled_code_t compiled_code;
 } trace_t;
 
 typedef enum {

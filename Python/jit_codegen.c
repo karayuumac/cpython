@@ -20,10 +20,12 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
   p += sprintf(p,
                "#include \"jit_runtime.h\"\n"
                "\n"
-               "PyObject* trace_func(jit_execution_context_t* ctx) {\n");
+               "PyObject* trace_func(jit_execution_context_t* ctx) {\n"
+               "    PyObject* v0 = NULL;\n"
+               );
 
   // レジスタ変数の宣言
-  for (int i = 0; i < lir->reg_count; i++)
+  for (int i = 1; i < lir->reg_count; i++)
   {
     p += sprintf(p, "    PyObject* v%d = NULL;\n", i);
   }
@@ -40,6 +42,17 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
     {
       switch (insn->opcode)
       {
+      case LIR_LOAD:
+        assert(insn->src1.kind == OPERAND_STACK);
+        p += sprintf(p,
+          "    {\n"
+          "        v%d = ctx->frame->f_valuestack[%d];\n"
+          "        Py_INCREF(v%d);\n"
+          "    }\n",
+          insn->dest.u.reg_num,
+          insn->src1.u.stack_pos,
+          insn->dest.u.reg_num
+          );
       case LIR_ADD:
         p += sprintf(p,
                      "    v%d = jit_binary_add(v%d, v%d);\n"
@@ -69,6 +82,12 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
     block = block->next;
   }
 
+  int last_reg = 0;
+  if (lir->reg_count != 0)
+  {
+    last_reg = lir->reg_count - 1;
+  }
+
   p += sprintf(p,
                "    return v%d;\n"
                "error:\n"
@@ -77,7 +96,7 @@ char* generate_c_code(lir_code_t* lir, trace_t* trace)
                "side_exit:\n"
                "    return NULL;\n"
                "}\n",
-               lir->reg_count - 1);
+               last_reg);
 
   return code;
 }
@@ -140,8 +159,7 @@ int jit_compile_trace(trace_t* trace)
   }
 
   // トレースにコンパイル済みコードを設定
-  trace->compiled_code = PyCapsule_New(func, "compiled_code", NULL);
-
+  trace->compiled_code = func;
   lir_free(lir);
   return 1;
 }

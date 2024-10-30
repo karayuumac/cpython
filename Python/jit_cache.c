@@ -7,7 +7,18 @@
 
 /// トレースキャッシュのキーの生成
 static PyObject *make_trace_key(PyCodeObject *code, int offset) {
-  return PyTuple_Pack(2, (PyObject *) code, PyLong_FromLong(offset));
+  Py_INCREF(code);
+  PyObject *offset_obj = PyLong_FromLong(offset);
+  if (offset_obj == NULL) {
+    Py_DECREF(code);
+    return NULL;
+  }
+
+  PyObject *key = PyTuple_Pack(2, code, offset_obj);
+  Py_DECREF(offset_obj);
+  Py_DECREF(code);
+
+  return key;
 }
 
 /// トレスのキャッシュへの登録
@@ -20,6 +31,9 @@ int jit_cache_trace(trace_t *trace) {
   if (key == NULL) {
     return -1;
   }
+
+  printf("Cache trace - key: %p, trace: %p\n",
+           (void*)key, (void*)trace);  // デバッグ出力
 
   // トレースをPyCapsuleでラップ
   PyObject *trace_capsule = PyCapsule_New(trace, "trace", NULL);
@@ -52,7 +66,11 @@ trace_t *jit_find_trace(PyCodeObject *code, int offset) {
   if (trace_capsule == NULL) {
     return NULL;
   }
-  return (trace_t *) PyCapsule_GetPointer(trace_capsule, "trace");
+
+  trace_t *trace = PyCapsule_GetPointer(trace_capsule, "trace");
+  printf("Found trace object: %p\n", (void*)trace);  // デバッグ出力
+
+  return trace;
 }
 
 /// トレースキャッシュからの削除

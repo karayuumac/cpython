@@ -1305,14 +1305,12 @@ eval_frame_handle_pending(PyThreadState *tstate)
             trace_t *trace = jit_find_trace(f->f_code, f->f_lasti); \
             if (trace != NULL && trace->compiled_code != NULL) \
             { \
-                if (jit_check_all_guards(trace, f)) \
+                PyObject *result = jit_execute_trace(tstate, f, trace); \
+                if (result != NULL) \
                 { \
-                    PyObject *result = jit_execute_trace(tstate, f, trace); \
-                    if (result != NULL) \
-                    { \
-                        retval = result; \
-                        goto exit_eval_frame; \
-                    } \
+                    printf("--- non null ---\n"); \
+                    retval = result; \
+                    goto exit_eval_frame; \
                 } \
             } \
             PyJIT_CheckTraceHead(f); \

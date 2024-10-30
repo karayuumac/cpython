@@ -2,6 +2,7 @@
  * Created by karayuu on 24/10/25.
  */
 #include "Python.h"
+#include "opcode.h"
 #include "internal/pycore_pystate.h"
 #include "jit_internal.h"
 
@@ -189,7 +190,6 @@ void jit_free_trace(trace_t* trace)
     // コンパイル済みコードの解放
     if (trace->compiled_code != NULL)
     {
-        Py_DECREF(trace->compiled_code);
         trace->compiled_code = NULL;
     }
 
@@ -274,6 +274,7 @@ int jit_start_recording(PyFrameObject* frame)
 
     jit_context->current_trace = trace;
     jit_context->state = TRACE_RECORDING;
+    printf("start recording!\n");
     return 0;
 }
 
@@ -307,6 +308,7 @@ void jit_stop_recoding(void)
 
     jit_context->current_trace = NULL;
     jit_context->state = TRACE_INACTIVE;
+    printf("stop recording\n");
 }
 
 /// 命令の記録
@@ -466,21 +468,22 @@ int jit_is_support_opcode(int opcode)
 {
     switch (opcode)
     {
-    case BINARY_AND:
-    case BINARY_SUBTRACT:
-    case BINARY_MULTIPLY:
-    case BINARY_TRUE_DIVIDE:
-    case BINARY_FLOOR_DIVIDE:
+    // case BINARY_AND:
+    // case BINARY_SUBTRACT:
+    // case BINARY_MULTIPLY:
+    // case BINARY_TRUE_DIVIDE:
+    // case BINARY_FLOOR_DIVIDE:
     // case BINARY_MODULO:
     // case BINARY_POWER:
-    case COMPARE_OP:
-    case JUMP_ABSOLUTE:
-    case POP_JUMP_IF_TRUE:
-    case POP_JUMP_IF_FALSE:
-    case LOAD_FAST:
-    case STORE_FAST:
-    case LOAD_METHOD:
-    case CALL_METHOD:
+    // case COMPARE_OP:
+    // case JUMP_ABSOLUTE:
+    // case POP_JUMP_IF_TRUE:
+    // case POP_JUMP_IF_FALSE:
+    // case LOAD_FAST:
+    // case STORE_FAST:
+    // case LOAD_METHOD:
+    // case CALL_METHOD:
+    case LOAD_CONST:
         return 1;
     default:
         return 0;
@@ -496,7 +499,6 @@ int jit_optimize_trace(trace_t* trace)
 /// トレースの実行を行う
 PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t* trace)
 {
-    printf("------  trace!   -----\n");
     jit_execution_context_t ctx = {
         .tstate = tstate,
         .frame = frame,
@@ -506,12 +508,14 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
     };
 
     // トレースの実行
-    PyObject* result = ((jit_compiled_code_t)trace->compiled_code)(&ctx);
+    PyObject* result = trace->compiled_code(&ctx);
 
     if (ctx.error)
     {
+        printf("error!\n");
         if (PyErr_Occurred())
         {
+            printf("python errir\n");
             return NULL;
         }
 

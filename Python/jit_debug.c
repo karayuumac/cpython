@@ -3,6 +3,7 @@
  */
 #include "Python.h"
 #include "internal/pycore_pystate.h"
+#include "opcode.h"
 #include "jit_internal.h"
 
 /// オペコード名の取得

@@ -65,8 +65,11 @@ typedef enum
 
   /// 型チェックガード
   LIR_GUARD_TYPE,
+  LIR_GUARD_TYPE_LL, // long long 型かどうか
   /// オーバーフローガード
-  LIR_GUARD_OVERFLOW,
+  LIR_GUARD_ADD_LL_OVERFLOW,
+  LIR_GUARD_SUB_LL_OVERFLOW,
+  LIR_GUARD_MUL_LL_OVERFLOW,
   /// 値の一致チェックガード
   LIR_GUARD_VALUE,
   /// クラスチェックガード

@@ -13,7 +13,7 @@
 /// 最大トレース長
 #define JIT_DEFAULT_TRACE_LIMIT 1000
 /// ホットトレース判定閾値
-#define JIT_HOT_TRACE_THRESHOLD 50
+#define JIT_HOT_TRACE_THRESHOLD 1000
 /// バッファ初期サイズ
 #define JIT_INIT_BUFFER_SIZE 128
 
@@ -40,9 +40,6 @@ typedef struct {
   PyObject **stack_pointer;
   int error;
 } jit_execution_context_t;
-
-/// コンパイル済みコードの型定義
-typedef PyObject* (*jit_compiled_code_t)(jit_execution_context_t *ctx);
 
 // 内部関数
 int jit_init_context(void);
