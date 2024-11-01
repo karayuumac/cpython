@@ -71,7 +71,7 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
       {
       case LIR_CONST:
         p += sprintf(p,
-          "v%d = ctx->frame->f_code->const[%d];\n",
+          "    v%d = PyTuple_GET_ITEM((PyTupleObject *) ctx->frame->f_code->co_consts, %d);\n",
           inst->dest.u.reg_num,
           inst->src1.u.heap_index
         );
@@ -79,7 +79,7 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
 
       case LIR_LOAD_NAME:
         p += sprintf(p,
-          "v%d = ctx->frame->f_code->names[%d];\n",
+          "    v%d = PyTuple_GET_ITEM((PyTupleObject *) ctx->frame->f_code->co_names, %d);\n",
           inst->dest.u.reg_num,
           inst->src1.u.heap_index
         );
@@ -88,23 +88,22 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
 
       case LIR_STORE_NAME:
         p += sprintf(p,
-          "{\n"
-          "    PyObject *name = v%d;\n"
-          "    PyObject *value = v%d;\n"
-          "    PyObject *ns = ctx->frame->f_locals;\n"
-          "    int err;\n"
-          "    if (ns == NULL) {\n"
-          "        goto error;\n"
-          "    }\n"
-          "    if (PyDict_CheckExact(ns))\n"
-          "        err = PyDict_SetItem(ns, name, v);\n"
-          "    else\n"
-          "        err = PyObject_SetItem(ns, name, v);\n"
-          "    Py_DECREF(value);\n"
-          "    if (err != 0)\n"
-          "        goto error;\n"
-          "    }\n"
-          "}\n",
+          "    {\n"
+          "        PyObject *name = v%d;\n"
+          "        PyObject *value = v%d;\n"
+          "        PyObject *ns = ctx->frame->f_locals;\n"
+          "        int err;\n"
+          "        if (ns == NULL) {\n"
+          "            goto error;\n"
+          "        }\n"
+          "        if (PyDict_CheckExact(ns))\n"
+          "            err = PyDict_SetItem(ns, name, value);\n"
+          "        else\n"
+          "            err = PyObject_SetItem(ns, name, value);\n"
+          "        Py_DECREF(value);\n"
+          "        if (err != 0)\n"
+          "            goto error;\n"
+          "    }\n",
           inst->src1.u.reg_num,
           inst->src2.u.reg_num
         );
@@ -120,6 +119,12 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
           inst->src1.u.stack_pos,
           inst->dest.u.reg_num
           );
+
+      case LIR_EXIT:
+        p += sprintf(p,
+          "    ctx->frame->f_lasti = %d;\n"
+          "    goto error;\n",
+          inst->src1.u.label);
 
       default:
         break;

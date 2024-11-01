@@ -287,6 +287,7 @@ void jit_stop_recoding(void)
     }
 
     trace_t* trace = jit_context->current_trace;
+    jit_dump_trace(trace);
 
     // トレースが有効な場合はキャッシュに追加する
     if (trace->buffer.length > 0)
@@ -312,7 +313,7 @@ void jit_stop_recoding(void)
 }
 
 /// 命令の記録
-void jit_record_instruction(PyFrameObject* frame)
+void jit_record_instruction(PyFrameObject* frame, PyObject **stack_pointer)
 {
     trace_t* trace = jit_context->current_trace;
     if (trace == NULL)
@@ -346,15 +347,8 @@ void jit_record_instruction(PyFrameObject* frame)
     // 基本情報の記録
     inst->opcode = opcode;
     inst->oparg = oparg;
-
-    PyObject** stack_start = frame->f_valuestack;
-    PyObject** stack_top = frame->f_localsplus;
-    int depth = 0;
-    while (stack_start + depth < stack_top && stack_start[depth] != NULL)
-    {
-        depth++;
-    }
-    inst->stack_depth = depth;
+    inst->f_lasti = offset;
+    printf("%p\n", stack_pointer);
 
     // スタック情報のコピー
     inst->stack_values = PyMem_Malloc(sizeof(PyObject*) * inst->stack_depth);
@@ -368,12 +362,12 @@ void jit_record_instruction(PyFrameObject* frame)
     }
 
     // スタック上の値と型情報を記録する
-    for (int i = 0; i < inst->stack_depth; i++)
+    for (int i = -1; i >= inst->stack_depth; i--)
     {
-        PyObject* obj = frame->f_valuestack[i];
+        PyObject* obj = stack_pointer[i];
         Py_XINCREF(obj);
-        inst->stack_values[i] = obj;
-        inst->stack_types[i] = obj ? Py_TYPE(obj) : NULL;
+        inst->stack_values[abs(i) - 1] = obj;
+        inst->stack_types[abs(i) - 1] = obj ? Py_TYPE(obj) : NULL;
     }
 
     // 参照情報の初期化
@@ -447,9 +441,9 @@ int jit_should_stop_recording(PyFrameObject* frame)
         return 1;
     }
 
-    // 命令がサポート外である場合
-    unsigned char opcode = PyBytes_AS_STRING(frame->f_code->co_code)[frame->f_lasti];
-    if (!jit_is_support_opcode(opcode))
+    // 既存トレースの開始位置に到達
+    trace_t *existing_trace = jit_find_trace(frame->f_code, frame->f_lasti);
+    if (existing_trace != NULL)
     {
         return 1;
     }
@@ -515,47 +509,39 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
 
     if (ctx.error)
     {
-        printf("error!\n");
         if (PyErr_Occurred())
         {
-            printf("python errir\n");
             return NULL;
         }
 
-        // ガード条件違反時の処理
-        if (ctx.error == GUARD_ERROR_TYPE ||
-            ctx.error == GUARD_ERROR_METHOD ||
-            ctx.error == GUARD_ERROR_VALUE ||
-            ctx.error == GUARD_ERROR_CLASS)
+        // サイドエグジットの場合:
+        // 1. スタック状態の復元
+        // 2. フレームの実行位置を適切な位置に更新
+        frame->f_valuestack = ctx.stack_pointer;
+        frame->f_lasti = ctx.trace->current_offset;
+
+        // 新しいトレースの記録を開始する
+        trace_t* new_trace = jit_create_trace(frame);
+        if (new_trace == NULL)
         {
-            // サイドエグジットの場合:
-            // 1. スタック状態の復元
-            // 2. フレームの実行位置を適切な位置に更新
-            frame->f_valuestack = ctx.stack_pointer;
-            frame->f_lasti = ctx.trace->current_offset;
-
-            // 新しいトレースの記録を開始する
-            trace_t* new_trace = jit_create_trace(frame);
-            if (new_trace == NULL)
-            {
-                return NULL;
-            }
-
-            // カウンタの設定
-            new_trace->counter = jit_get_counter(frame->f_code, frame->f_lasti);
-            if (new_trace->counter == NULL)
-            {
-                jit_free_trace(new_trace);
-                return NULL;
-            }
-
-            // 親トレースの設定
-            new_trace->parent = ctx.trace;
-
-            // コンテキストの更新
-            jit_context->current_trace = new_trace;
-            jit_context->state = TRACE_RECORDING;
+            return NULL;
         }
+
+        // カウンタの設定
+        new_trace->counter = jit_get_counter(frame->f_code, frame->f_lasti);
+        if (new_trace->counter == NULL)
+        {
+            jit_free_trace(new_trace);
+            return NULL;
+        }
+
+        // 親トレースの設定
+        new_trace->parent = ctx.trace;
+
+        // コンテキストの更新
+        jit_context->current_trace = new_trace;
+        jit_context->state = TRACE_RECORDING;
+
         return NULL;
     }
 

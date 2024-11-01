@@ -33,6 +33,9 @@ typedef struct trace_instruction {
     /// ローカル変数参照時の値
     PyObject *locals;
   } refs;
+
+  /// インタプリタ実行時の f_lasti の値
+  int f_lasti;
 } trace_instruction_t;
 
 /// トレース情報を保持する構造体
@@ -131,7 +134,7 @@ PyAPI_FUNC(void) PyJIT_Finalize(void);
 
 PyAPI_FUNC(int) PyJIT_CheckTraceHead(PyFrameObject *frame);
 
-PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame);
+PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer);
 
 PyAPI_FUNC(trace_t *) PyJIT_GetCurrentTrace(void);
 

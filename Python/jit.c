@@ -105,7 +105,7 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
 }
 
 /// トレースの記録
-int PyJIT_RecordTrace(PyFrameObject *frame) {
+int PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer) {
   if (jit_context == NULL || jit_context->state != TRACE_RECORDING || jit_context->current_trace == NULL) {
     return 0;
   }
@@ -117,6 +117,6 @@ int PyJIT_RecordTrace(PyFrameObject *frame) {
   }
 
   // 命令を記録
-  jit_record_instruction(frame);
+  jit_record_instruction(frame, stack_pointer);
   return 0;
 }

@@ -237,8 +237,10 @@ lir_code_t* generate_lir(trace_t* trace)
       */
 
     default:
-      lir_inst_t* nop = lir_new_inst(LIR_NOPE);
-      lir_append_inst(lir->current, nop);
+      lir_inst_t *exit = lir_new_inst(LIR_EXIT);
+      exit->src1 = lir_label_operand(inst->f_lasti);
+      lir_append_inst(lir->current, exit);
+      return lir;
 
       // TODO: その他命令の追加
     }

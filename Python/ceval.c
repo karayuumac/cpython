@@ -1308,14 +1308,18 @@ eval_frame_handle_pending(PyThreadState *tstate)
                 PyObject *result = jit_execute_trace(tstate, f, trace); \
                 if (result != NULL) \
                 { \
-                    printf("--- non null ---\n"); \
                     retval = result; \
                     goto exit_eval_frame; \
+                } \
+                else \
+                { \
+                    printf("move to interpreter!\n"); \
+                    goto dispatch_opcode; \
                 } \
             } \
             PyJIT_CheckTraceHead(f); \
             if (jit_context && jit_context->state == TRACE_RECORDING) { \
-                PyJIT_RecordTrace(f); \
+                PyJIT_RecordTrace(f, stack_pointer); \
             } \
         } \
         if (trace_info.cframe.use_tracing OR_DTRACE_LINE OR_LLTRACE) { \

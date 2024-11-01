@@ -1,3 +1,4 @@
-for i in range(1002):
-    j = 100
-    print(j)
+j = 0
+while j < 20000:
+    i = 1
+    j += i

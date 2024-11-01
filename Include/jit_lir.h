@@ -105,6 +105,9 @@ typedef enum
   LIR_PUSH,
   /// スタックポップ
   LIR_POP,
+
+  /// サイドエグジット
+  LIR_EXIT,
 } lir_optcode_t;
 
 /// ガードエラーの種類
