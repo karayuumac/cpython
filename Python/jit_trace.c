@@ -348,7 +348,7 @@ void jit_record_instruction(PyFrameObject* frame, PyObject **stack_pointer)
     inst->opcode = opcode;
     inst->oparg = oparg;
     inst->f_lasti = offset;
-    printf("%p\n", stack_pointer);
+    inst->stack_depth = abs(stack_pointer - frame->f_valuestack);
 
     // スタック情報のコピー
     inst->stack_values = PyMem_Malloc(sizeof(PyObject*) * inst->stack_depth);
@@ -362,12 +362,12 @@ void jit_record_instruction(PyFrameObject* frame, PyObject **stack_pointer)
     }
 
     // スタック上の値と型情報を記録する
-    for (int i = -1; i >= inst->stack_depth; i--)
+    for (int i = 1; i <= inst->stack_depth; i++)
     {
-        PyObject* obj = stack_pointer[i];
+        PyObject* obj = stack_pointer[-i];
         Py_XINCREF(obj);
-        inst->stack_values[abs(i) - 1] = obj;
-        inst->stack_types[abs(i) - 1] = obj ? Py_TYPE(obj) : NULL;
+        inst->stack_values[i - 1] = obj;
+        inst->stack_types[i - 1] = obj ? Py_TYPE(obj) : NULL;
     }
 
     // 参照情報の初期化
