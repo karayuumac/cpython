@@ -9,6 +9,9 @@
 #include "Include/frameobject.h"
 #include "Include/structmember.h"
 
+#include "jit.h"
+#include "jit_lir.h"
+
 struct jit_execution_context;
 /// コンパイル済みコードの型定義
 typedef PyObject* (*jit_compiled_code_t)(struct jit_execution_context* ctx);
@@ -80,6 +83,17 @@ typedef struct trace {
     /// ガード条件の配列
     struct trace_guard *guards;
   } guard_conditions;
+
+  /// 発行された lir バッファ
+  struct
+  {
+    /// lir バッファサイズ
+    Py_ssize_t capacity;
+    /// 実際の lir 数
+    Py_ssize_t length;
+    /// lir の配列
+    lir_optcode_t *lirs;
+  } lir_buffer;
 
   /// コンパイル済みのネイティブコード
   jit_compiled_code_t compiled_code;

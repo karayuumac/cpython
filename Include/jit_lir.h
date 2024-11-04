@@ -6,12 +6,18 @@
 #define CPYTHON_JIT_LIR_H
 
 #include "Python.h"
-#include "jit_internal.h"
-#include <limits.h>
+
+#include "jit.h"
 
 /// LIR命令の種類
 typedef enum
 {
+  /// 型チェックガード
+  LIR_GUARD_TYPE_LL, // long long 型かどうか
+  /// 定数のロード
+  LIR_LOAD_CONST_LL,
+
+
   LIR_NOPE,
   /// 定数ロード
   LIR_CONST,
@@ -67,7 +73,6 @@ typedef enum
 
   /// 型チェックガード
   LIR_GUARD_TYPE,
-  LIR_GUARD_TYPE_LL, // long long 型かどうか
   /// オーバーフローガード
   LIR_GUARD_ADD_LL_OVERFLOW,
   LIR_GUARD_SUB_LL_OVERFLOW,
@@ -230,14 +235,4 @@ lir_operand_t lir_method_operand(PyObject *method);
 lir_operand_t lir_label_operand(int label);
 
 // char* generate_operand_code(lir_operand_t *operand);
-
-/// トレースからLIRへの変換
-lir_code_t *generate_lir(trace_t *trace);
-
-/// コード生成
-char* generate_c_code(lir_code_t* lir, trace_t* trace);
-
-/// コンパイル
-int jit_compile_trace(trace_t* trace);
-
 #endif //CPYTHON_JIT_LIR_H

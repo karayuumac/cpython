@@ -1,7 +1,7 @@
 //
 // Created by karayuu on 24/10/28.
 //
-#include "jit_lir.h"
+#include "jit.h"
 #include "opcode.h"
 #include <dlfcn.h>
 

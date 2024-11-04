@@ -4,7 +4,7 @@
 #include "Python.h"
 #include "internal/pycore_pystate.h"
 #include "opcode.h"
-#include "jit_internal.h"
+#include "jit.h"
 
 /// オペコード名の取得
 char* get_opcode_name(int opcode)

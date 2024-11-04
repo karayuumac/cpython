@@ -109,6 +109,20 @@ trace_t* jit_create_trace(PyFrameObject* frame)
         return NULL;
     }
 
+    // lir命令バッファの初期化
+    trace->lir_buffer.capacity = JIT_INIT_BUFFER_SIZE;
+    trace->lir_buffer.length = 0;
+    trace->lir_buffer.lirs = (lir_optcode_t *) PyMem_Malloc(sizeof(lir_optcode_t) * JIT_INIT_BUFFER_SIZE);
+    if (trace->lir_buffer.lirs == NULL)
+    {
+        PyMem_Free(trace->type_info.types);
+        PyMem_Free(trace->buffer.instructions);
+        PyMem_Free(trace->guard_conditions.guards);
+        Py_DECREF(trace->code);
+        PyMem_Free(trace);
+        return NULL;
+    }
+
     return trace;
 }
 
@@ -551,4 +565,29 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
     frame->f_lasti = trace->current_offset;
 
     return result;
+}
+
+void jit_record_lir(lir_optcode_t lir)
+{
+    trace_t* trace = jit_context->current_trace;
+    if (trace == NULL)
+    {
+        return;
+    }
+
+    // もしバッファが一杯なら, リサイズする
+    if (trace->lir_buffer.length >= trace->lir_buffer.capacity)
+    {
+        Py_ssize_t new_capacity = trace->buffer.capacity * 2;
+        lir_optcode_t *new_lirs = PyMem_Realloc(trace->lir_buffer.lirs, sizeof(lir_optcode_t) * new_capacity);
+        if (new_lirs == NULL)
+        {
+            return;
+        }
+        trace->lir_buffer.lirs = new_lirs;
+        trace->lir_buffer.capacity = new_capacity;
+    }
+
+    trace->lir_buffer.lirs[trace->lir_buffer.length] = lir;
+    trace->lir_buffer.length++;
 }

@@ -1,7 +1,7 @@
 //
 // Created by karayuu on 24/10/28.
 //
-#include "jit_lir.h"
+#include "jit.h"
 
 /// LIRコードの作成
 lir_code_t *lir_create(void)

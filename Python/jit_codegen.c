@@ -2,6 +2,7 @@
 // Created by root on 24/10/28.
 //
 
+#include "jit_internal.h"
 #include "jit_runtime.h"
 #include <dlfcn.h>
 #include <opcode.h>

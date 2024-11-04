@@ -1595,6 +1595,11 @@ eval_frame_handle_pending(PyThreadState *tstate)
 
 #endif
 
+#define EMIT(lir) \
+    if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
+    { \
+       jit_record_lir(lir); \
+    }
 
 PyObject* _Py_HOT_FUNCTION
 _PyEval_EvalFrameDefault(PyThreadState *tstate, PyFrameObject *f, int throwflag)

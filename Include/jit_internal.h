@@ -6,6 +6,7 @@
 #define CPYTHON_JIT_INTERNAL_H
 
 #include "Include/Python.h"
+
 #include "jit.h"
 #include "jit_lir.h"
 
@@ -67,5 +68,14 @@ int jit_compile_trace(trace_t *trace);
 PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace);
 int jit_check_all_guards(trace_t *trace, PyFrameObject *frame);
 int jit_check_guard(trace_guard_t *guard, PyObject *actual);
+
+void jit_record_lir(lir_optcode_t lir);
+
+/// トレースからLIRへの変換
+lir_code_t *generate_lir(trace_t *trace);
+/// コード生成
+char* generate_c_code(lir_code_t* lir, trace_t* trace);
+/// コンパイル
+int jit_compile_trace(trace_t* trace);
 
 #endif //CPYTHON_JIT_INTERNAL_H
