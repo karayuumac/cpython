@@ -46,6 +46,7 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
 
   // ヘッダーとインクルード
   p += sprintf(p,
+               "#include \"jit_internal.h\"\n"
                "#include \"jit_runtime.h\"\n"
                "\n"
                "PyObject* trace_func(jit_execution_context_t* ctx) {\n"

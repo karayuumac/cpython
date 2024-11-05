@@ -14,8 +14,10 @@ typedef enum
 {
   /// 型チェックガード
   LIR_GUARD_TYPE_LL, // long long 型かどうか
-  /// 定数のロード
-  LIR_LOAD_CONST_LL,
+  /// スタックプッシュ
+  LIR_PUSH,
+  /// スタックポップ
+  LIR_POP,
 
 
   LIR_NOPE,
@@ -106,14 +108,18 @@ typedef enum
   /// メソッド呼び出し
   LIR_CALL,
 
-  /// スタックプッシュ
-  LIR_PUSH,
-  /// スタックポップ
-  LIR_POP,
-
   /// サイドエグジット
   LIR_EXIT,
 } lir_optcode_t;
+
+typedef struct
+{
+  lir_optcode_t optcode;
+  union
+  {
+    PyObject * obj;
+  };
+} lir_opt_t;
 
 /// ガードエラーの種類
 typedef enum

@@ -92,7 +92,7 @@ typedef struct trace {
     /// 実際の lir 数
     Py_ssize_t length;
     /// lir の配列
-    lir_optcode_t *lirs;
+    lir_opt_t **lirs;
   } lir_buffer;
 
   /// コンパイル済みのネイティブコード

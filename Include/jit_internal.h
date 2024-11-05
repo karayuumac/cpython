@@ -69,7 +69,7 @@ PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t
 int jit_check_all_guards(trace_t *trace, PyFrameObject *frame);
 int jit_check_guard(trace_guard_t *guard, PyObject *actual);
 
-void jit_record_lir(lir_optcode_t lir);
+void jit_record_lir(lir_optcode_t lir, PyObject *obj) ;
 
 /// トレースからLIRへの変換
 lir_code_t *generate_lir(trace_t *trace);

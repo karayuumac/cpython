@@ -567,7 +567,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
     return result;
 }
 
-void jit_record_lir(lir_optcode_t lir)
+void jit_record_lir(lir_optcode_t lir, PyObject* obj)
 {
     trace_t* trace = jit_context->current_trace;
     if (trace == NULL)
@@ -588,6 +588,16 @@ void jit_record_lir(lir_optcode_t lir)
         trace->lir_buffer.capacity = new_capacity;
     }
 
-    trace->lir_buffer.lirs[trace->lir_buffer.length] = lir;
+    lir_opt_t *lir_opt = PyMem_Malloc(sizeof(lir_opt_t));
+    if (lir_opt == NULL)
+    {
+        PyMem_Free(lir_opt);
+        return;
+    }
+
+    lir_opt->optcode = lir;
+    lir_opt->obj = obj;
+
+    trace->lir_buffer.lirs[trace->lir_buffer.length] = lir_opt;
     trace->lir_buffer.length++;
 }

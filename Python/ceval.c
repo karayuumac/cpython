@@ -1595,10 +1595,10 @@ eval_frame_handle_pending(PyThreadState *tstate)
 
 #endif
 
-#define EMIT(lir) \
+#define EMIT(lir, obj) \
     if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
     { \
-       jit_record_lir(lir); \
+       jit_record_lir(lir, obj); \
     }
 
 PyObject* _Py_HOT_FUNCTION
@@ -1880,6 +1880,7 @@ main_loop:
            and that all operation that succeed call DISPATCH() ! */
 
         case TARGET(NOP): {
+            EMIT(LIR_NOPE, NULL);
             DISPATCH();
         }
 
@@ -1893,6 +1894,8 @@ main_loop:
             }
             Py_INCREF(value);
             PUSH(value);
+
+            EMIT(LIR_PUSH, value);
             DISPATCH();
         }
 
