@@ -6,7 +6,6 @@
 #define JIT_RUNTIME_H
 
 #include "Python.h"
-#include "jit.h"
 
 // 共通のランタイム関数
 static PyObject* jit_binary_add(PyObject* a, PyObject* b) {

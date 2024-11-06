@@ -142,6 +142,44 @@ char* get_opcode_name(int opcode)
     }
 }
 
+/// LIR命令の文字列化
+char *get_lir_opcode_name(const lir_op_t *op)
+{
+    switch (op->opcode)
+    {
+    case LIR_NOPE: return "LIR_NOPE";
+    case LIR_GUARD_TYPE_LL: return "LIR_GUARD_TYPE_LL";
+    case LIR_LOAD_NAME: return "LIR_LOAD_NAME";
+    case LIR_PUSH: return "LIR_PUSH";
+    case LIR_LOAD_CONST_LL: return "LIR_LOAD_CONST_LL";
+    default: return "UNKNOWN";
+    }
+}
+
+char *get_lir_oparg_info(const lir_op_t *op)
+{
+    char buf[10000];
+    switch (op->opcode)
+    {
+    case LIR_NOPE:
+        sprintf(buf, "");
+        break;
+    case LIR_ENV_LOAD:
+        sprintf(buf, "arg = %d", op->oparg.arg);
+        break;
+    case LIR_PUSH:
+        sprintf(buf, "ref = %s", get_lir_opcode_name(op->oparg.ref_op));
+        break;
+    case LIR_LOAD_CONST_LL:
+        sprintf(buf, "ll = %ld", op->oparg.ll);
+        break;
+    default:
+        sprintf(buf, "<error>");
+        break;
+    }
+    return buf;
+}
+
 /// オブジェクトの文字列表現
 static const char* object_str(PyObject* obj)
 {
@@ -241,13 +279,13 @@ void jit_dump_trace(trace_t* trace)
                    ((PyTypeObject*)guard->expected.value)->tp_name);
             break;
 
-        /*
-      case GUARD_SHAPE:
-        printf("Shape guard: stack[%d] shape == %s\n",
-               guard->stack_index,
-               object_str(guard->expected.shape));
-        break;
-         */
+            /*
+          case GUARD_SHAPE:
+            printf("Shape guard: stack[%d] shape == %s\n",
+                   guard->stack_index,
+                   object_str(guard->expected.shape));
+            break;
+             */
 
         case GUARD_VALUE:
             printf("Value guard: stack[%d] == %s\n",
@@ -255,6 +293,15 @@ void jit_dump_trace(trace_t* trace)
                    object_str(guard->expected.value));
             break;
         }
+    }
+
+    // lir 命令の表示
+    printf("LIR instructions (%zd):\n", trace->lir_buffer.length);
+    for (Py_ssize_t i = 0; i < trace->lir_buffer.length; i++)
+    {
+        lir_op_t *lir_op = &trace->lir_buffer.lirs[i];
+        printf("%4zd: %s\n", i, get_lir_opcode_name(lir_op));
+        printf("    %s\n", get_lir_oparg_info(lir_op));
     }
     printf("==========\n");
 }

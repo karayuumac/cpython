@@ -85,7 +85,7 @@ lir_block_t *lir_new_block(lir_code_t *lir)
 }
 
 /// 新規命令の作成
-lir_inst_t *lir_new_inst(lir_optcode_t opcode)
+lir_inst_t *lir_new_inst(lir_opcode_t opcode)
 {
   lir_inst_t *inst = (lir_inst_t *) PyMem_Malloc(sizeof(lir_inst_t));
   if (!inst)

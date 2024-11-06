@@ -1595,10 +1595,11 @@ eval_frame_handle_pending(PyThreadState *tstate)
 
 #endif
 
-#define EMIT(lir, obj) \
+#include "jit_record.h"
+#define EMIT(lir, ...) \
     if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
     { \
-       jit_record_lir(lir, obj); \
+        jit_record_##lir(__VA_ARGS__); \
     }
 
 PyObject* _Py_HOT_FUNCTION
@@ -1880,7 +1881,7 @@ main_loop:
            and that all operation that succeed call DISPATCH() ! */
 
         case TARGET(NOP): {
-            EMIT(LIR_NOPE, NULL);
+            EMIT(LIR_NOPE);
             DISPATCH();
         }
 
@@ -1895,7 +1896,7 @@ main_loop:
             Py_INCREF(value);
             PUSH(value);
 
-            EMIT(LIR_PUSH, value);
+            EMIT(LIR_ENV_LOAD_AND_PUSH, oparg);
             DISPATCH();
         }
 
@@ -1904,6 +1905,12 @@ main_loop:
             PyObject *value = GETITEM(consts, oparg);
             Py_INCREF(value);
             PUSH(value);
+
+            if (PyLong_Check(value))
+            {
+                EMIT(LIR_LOAD_CONST_LL, PyLong_AsLongLong(value))
+            }
+
             DISPATCH();
         }
 

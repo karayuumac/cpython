@@ -399,6 +399,7 @@ PYTHON_OBJS=	\
 		Python/jit_lir.o \
 		Python/jit_compiler.o \
 		Python/jit_codegen.o \
+		Python/jit_record.o \
 		Python/$(DYNLOADFILE) \
 		$(LIBOBJS) \
 		$(MACHDEP_OBJS) \
@@ -1116,6 +1117,7 @@ PYTHON_HEADERS= \
 		$(srcdir)/Include/jit_internal.h \
 		$(srcdir)/Include/jit_lir.h \
 		$(srcdir)/Include/jit_runtime.h \
+		$(srcdir)/Include/jit_record.h \
 		\
 		pyconfig.h \
 		$(PARSER_HEADERS) \

@@ -112,7 +112,7 @@ trace_t* jit_create_trace(PyFrameObject* frame)
     // lir命令バッファの初期化
     trace->lir_buffer.capacity = JIT_INIT_BUFFER_SIZE;
     trace->lir_buffer.length = 0;
-    trace->lir_buffer.lirs = (lir_optcode_t *) PyMem_Malloc(sizeof(lir_optcode_t) * JIT_INIT_BUFFER_SIZE);
+    trace->lir_buffer.lirs = (lir_op_t *) PyMem_Malloc(sizeof(lir_op_t) * JIT_INIT_BUFFER_SIZE);
     if (trace->lir_buffer.lirs == NULL)
     {
         PyMem_Free(trace->type_info.types);
@@ -535,26 +535,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
         frame->f_lasti = ctx.trace->current_offset;
 
         // 新しいトレースの記録を開始する
-        trace_t* new_trace = jit_create_trace(frame);
-        if (new_trace == NULL)
-        {
-            return NULL;
-        }
-
-        // カウンタの設定
-        new_trace->counter = jit_get_counter(frame->f_code, frame->f_lasti);
-        if (new_trace->counter == NULL)
-        {
-            jit_free_trace(new_trace);
-            return NULL;
-        }
-
-        // 親トレースの設定
-        new_trace->parent = ctx.trace;
-
-        // コンテキストの更新
-        jit_context->current_trace = new_trace;
-        jit_context->state = TRACE_RECORDING;
+        PyJIT_CheckTraceHead(frame);
 
         return NULL;
     }
@@ -567,7 +548,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
     return result;
 }
 
-void jit_record_lir(lir_optcode_t lir, PyObject* obj)
+void jit_record_lir(lir_op_t* lir_op)
 {
     trace_t* trace = jit_context->current_trace;
     if (trace == NULL)
@@ -578,8 +559,8 @@ void jit_record_lir(lir_optcode_t lir, PyObject* obj)
     // もしバッファが一杯なら, リサイズする
     if (trace->lir_buffer.length >= trace->lir_buffer.capacity)
     {
-        Py_ssize_t new_capacity = trace->buffer.capacity * 2;
-        lir_optcode_t *new_lirs = PyMem_Realloc(trace->lir_buffer.lirs, sizeof(lir_optcode_t) * new_capacity);
+        Py_ssize_t new_capacity = trace->lir_buffer.capacity * 2;
+        lir_op_t *new_lirs = PyMem_Realloc(trace->lir_buffer.lirs, sizeof(lir_op_t) * new_capacity);
         if (new_lirs == NULL)
         {
             return;
@@ -588,16 +569,6 @@ void jit_record_lir(lir_optcode_t lir, PyObject* obj)
         trace->lir_buffer.capacity = new_capacity;
     }
 
-    lir_opt_t *lir_opt = PyMem_Malloc(sizeof(lir_opt_t));
-    if (lir_opt == NULL)
-    {
-        PyMem_Free(lir_opt);
-        return;
-    }
-
-    lir_opt->optcode = lir;
-    lir_opt->obj = obj;
-
-    trace->lir_buffer.lirs[trace->lir_buffer.length] = lir_opt;
+    trace->lir_buffer.lirs[trace->lir_buffer.length] = *lir_op;
     trace->lir_buffer.length++;
 }

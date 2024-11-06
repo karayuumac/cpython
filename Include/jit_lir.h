@@ -18,7 +18,10 @@ typedef enum
   LIR_PUSH,
   /// スタックポップ
   LIR_POP,
-
+  /// 環境からのロード
+  LIR_ENV_LOAD,
+  /// 定数のロード
+  LIR_LOAD_CONST_LL,
 
   LIR_NOPE,
   /// 定数ロード
@@ -110,16 +113,25 @@ typedef enum
 
   /// サイドエグジット
   LIR_EXIT,
-} lir_optcode_t;
+} lir_opcode_t;
 
-typedef struct
+/// LIR 命令
+typedef struct lir_op lir_op_t;
+struct lir_op
 {
-  lir_optcode_t optcode;
+  /// LIR 命令の種類
+  lir_opcode_t opcode;
+  /// LIR 命令に付随する引数
   union
   {
-    PyObject * obj;
-  };
-} lir_opt_t;
+    PyObject *obj;
+    int arg;
+    lir_op_t *ref_op;
+    long long ll;
+  } oparg;
+  /// 生成されたCコードにおけるレジスタ番号
+  int register_index;
+};
 
 /// ガードエラーの種類
 typedef enum
@@ -180,7 +192,7 @@ typedef struct
 typedef struct lir_inst
 {
   /// 命令種類
-  lir_optcode_t opcode;
+  lir_opcode_t opcode;
   /// 結果格納先
   lir_operand_t dest;
   /// ソースオペランド
@@ -226,7 +238,7 @@ typedef struct
 lir_code_t *lir_create(void);
 void lir_free(lir_code_t *lir);
 lir_block_t* lir_new_block(lir_code_t *lir);
-lir_inst_t *lir_new_inst(lir_optcode_t opcode);
+lir_inst_t *lir_new_inst(lir_opcode_t opcode);
 void lir_append_inst(lir_block_t *block, lir_inst_t *inst);
 int lir_add_constant(lir_code_t *lir, PyObject *const_var);
 
