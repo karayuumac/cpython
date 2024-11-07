@@ -20,6 +20,8 @@ typedef enum
   LIR_POP,
   /// 環境からのロード
   LIR_ENV_LOAD,
+  /// 環境へのストア
+  LIR_ENV_STORE,
   /// 定数のロード
   LIR_LOAD_CONST_LL,
 

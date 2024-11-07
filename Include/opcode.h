@@ -135,6 +135,11 @@ extern "C" {
 #define SET_UPDATE              163
 #define DICT_MERGE              164
 #define DICT_UPDATE             165
+
+#define NOP_REC 200
+#define LOAD_FAST_REC 201
+#define LOAD_CONST_REC 202
+#define STORE_NAME_REC 203
 #ifdef NEED_OPCODE_JUMP_TABLES
 static uint32_t _PyOpcode_RelativeJump[8] = {
     0U,

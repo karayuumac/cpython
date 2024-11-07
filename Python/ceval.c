@@ -1327,7 +1327,14 @@ eval_frame_handle_pending(PyThreadState *tstate)
         } \
         f->f_lasti = INSTR_OFFSET(); \
         NEXTOPARG();                                                   \
-        goto *opcode_targets[opcode]; \
+        if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
+        { \
+            goto *opcode_targets_rec[opcode]; \
+        } \
+        else \
+        { \
+            goto *opcode_targets[opcode]; \
+        } \
     }
 #else
 #define TARGET(op) op
@@ -1881,9 +1888,14 @@ main_loop:
            and that all operation that succeed call DISPATCH() ! */
 
         case TARGET(NOP): {
-            EMIT(LIR_NOPE);
             DISPATCH();
         }
+
+        case TARGET(NOP_REC):
+            {
+                EMIT(LIR_NOPE);
+                DISPATCH();
+            }
 
         case TARGET(LOAD_FAST): {
             PyObject *value = GETLOCAL(oparg);
@@ -1895,24 +1907,47 @@ main_loop:
             }
             Py_INCREF(value);
             PUSH(value);
-
-            EMIT(LIR_ENV_LOAD_AND_PUSH, oparg);
             DISPATCH();
         }
+
+            case TARGET(LOAD_FAST_REC):
+            {
+                PyObject *value = GETLOCAL(oparg);
+                if (value == NULL) {
+                    format_exc_check_arg(tstate, PyExc_UnboundLocalError,
+                                         UNBOUNDLOCAL_ERROR_MSG,
+                                         PyTuple_GetItem(co->co_varnames, oparg));
+                    goto error;
+                }
+                Py_INCREF(value);
+                PUSH(value);
+
+                EMIT(LIR_ENV_LOAD_AND_PUSH, oparg);
+                DISPATCH();
+            }
 
         case TARGET(LOAD_CONST): {
             PREDICTED(LOAD_CONST);
             PyObject *value = GETITEM(consts, oparg);
             Py_INCREF(value);
             PUSH(value);
-
-            if (PyLong_Check(value))
-            {
-                EMIT(LIR_LOAD_CONST_LL, PyLong_AsLongLong(value))
-            }
-
             DISPATCH();
         }
+
+            case TARGET(LOAD_CONST_REC):
+            {
+                PREDICTED(LOAD_CONST_REC);
+                PyObject *value = GETITEM(consts, oparg);
+                Py_INCREF(value);
+                PUSH(value);
+
+                if (PyLong_Check(value))
+                {
+                    EMIT(LIR_LOAD_CONST_LL, PyLong_AsLongLong(value))
+                }
+
+                DISPATCH();
+            }
 
         case TARGET(STORE_FAST): {
             PREDICTED(STORE_FAST);
@@ -2813,6 +2848,31 @@ main_loop:
                 goto error;
             DISPATCH();
         }
+
+            case TARGET(STORE_NAME_REC):
+            {
+                PyObject *name = GETITEM(names, oparg);
+                PyObject *v = POP();
+                PyObject *ns = f->f_locals;
+                int err;
+                if (ns == NULL) {
+                    _PyErr_Format(tstate, PyExc_SystemError,
+                                  "no locals found when storing %R", name);
+                    Py_DECREF(v);
+                    goto error;
+                }
+                if (PyDict_CheckExact(ns))
+                    err = PyDict_SetItem(ns, name, v);
+                else
+                    err = PyObject_SetItem(ns, name, v);
+                Py_DECREF(v);
+                if (err != 0)
+                    goto error;
+
+                EMIT(LIR_POP_AND_ENV_STORE, oparg);
+
+                DISPATCH();
+            }
 
         case TARGET(DELETE_NAME): {
             PyObject *name = GETITEM(names, oparg);

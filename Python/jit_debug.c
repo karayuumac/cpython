@@ -148,17 +148,21 @@ char *get_lir_opcode_name(const lir_op_t *op)
     switch (op->opcode)
     {
     case LIR_NOPE: return "LIR_NOPE";
-    case LIR_GUARD_TYPE_LL: return "LIR_GUARD_TYPE_LL";
-    case LIR_LOAD_NAME: return "LIR_LOAD_NAME";
+    case LIR_ENV_LOAD: return "LIR_ENV_LOAD";
     case LIR_PUSH: return "LIR_PUSH";
+    case LIR_POP: return "LIR_POP";
+    case LIR_ENV_STORE: return "LIR_ENV_STORE";
     case LIR_LOAD_CONST_LL: return "LIR_LOAD_CONST_LL";
+    // case LIR_GUARD_TYPE_LL: return "LIR_GUARD_TYPE_LL";
     default: return "UNKNOWN";
     }
 }
 
 char *get_lir_oparg_info(const lir_op_t *op)
 {
-    char buf[10000];
+    static char _buf[10000];
+    char *buf = _buf;
+
     switch (op->opcode)
     {
     case LIR_NOPE:
@@ -169,6 +173,12 @@ char *get_lir_oparg_info(const lir_op_t *op)
         break;
     case LIR_PUSH:
         sprintf(buf, "ref = %s", get_lir_opcode_name(op->oparg.ref_op));
+        break;
+    case LIR_POP:
+        sprintf(buf, "ref = %s", get_lir_opcode_name(op->oparg.ref_op));
+        break;
+    case LIR_ENV_STORE:
+        sprintf(buf, "arg = %d", op->oparg.arg);
         break;
     case LIR_LOAD_CONST_LL:
         sprintf(buf, "ll = %ld", op->oparg.ll);

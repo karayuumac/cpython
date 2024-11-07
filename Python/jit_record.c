@@ -47,3 +47,17 @@ void jit_record_LIR_LOAD_CONST_LL(long long value)
     lir->oparg.ll = value;
     jit_record_lir(lir);
 }
+
+void jit_record_LIR_POP_AND_ENV_STORE(int oparg)
+{
+    lir_op_t *lir_store = initialize_lir_op();
+    lir_store->opcode = LIR_ENV_STORE;
+    lir_store->oparg.arg = oparg;
+
+    lir_op_t *lir_pop = initialize_lir_op();
+    lir_pop->opcode = LIR_POP;
+    lir_pop->oparg.ref_op = lir_store;
+
+    jit_record_lir(lir_pop);
+    jit_record_lir(lir_store);
+}

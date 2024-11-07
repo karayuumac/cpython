@@ -11,5 +11,6 @@ void jit_record_LIR_NOPE();
 void jit_record_LIR_ENV_LOAD_AND_PUSH(int oparg);
 void jit_record_LIR_PUSH(PyObject* obj);
 void jit_record_LIR_LOAD_CONST_LL(long long value);
+void jit_record_LIR_POP_AND_ENV_STORE(int oparg);
 
 #endif //JIT_RECORD_H
