@@ -28,7 +28,6 @@ void jit_record_LIR_ENV_LOAD_AND_PUSH(int oparg)
 
     lir_op_t *lir_push = initialize_lir_op();
     lir_push->opcode = LIR_PUSH;
-    lir_push->oparg.ref_op = lir_env_load;
     jit_record_lir(lir_push);
 }
 
@@ -56,8 +55,48 @@ void jit_record_LIR_POP_AND_ENV_STORE(int oparg)
 
     lir_op_t *lir_pop = initialize_lir_op();
     lir_pop->opcode = LIR_POP;
-    lir_pop->oparg.ref_op = lir_store;
 
     jit_record_lir(lir_pop);
     jit_record_lir(lir_store);
+}
+
+void jit_record_LIR_LL_ADD_OVERFLOW()
+{
+    lir_op_t *lir_pop = initialize_lir_op();
+    lir_pop->opcode = LIR_POP;
+    jit_record_lir(lir_pop);
+
+    lir_op_t *lir_pop_guard_ll = initialize_lir_op();
+    lir_pop_guard_ll->opcode = LIR_GUARD_TYPE_LL;
+    jit_record_lir(lir_pop_guard_ll);
+
+    lir_op_t *lir_pop_two = initialize_lir_op();
+    lir_pop_two->opcode = LIR_POP;
+    jit_record_lir(lir_pop_two);
+
+    lir_op_t *lir_pop_two_guard_ll = initialize_lir_op();
+    lir_pop_two_guard_ll->opcode = LIR_GUARD_TYPE_LL;
+    jit_record_lir(lir_pop_two_guard_ll);
+
+    lir_op_t *lir_guard_add_overflow_ll = initialize_lir_op();
+    lir_guard_add_overflow_ll->opcode = LIR_GUARD_ADD_OVERFLOW_LL;
+    jit_record_lir(lir_guard_add_overflow_ll);
+
+    lir_op_t *lir_add_ll = initialize_lir_op();
+    lir_add_ll->opcode = LIR_ADD_LL;
+    jit_record_lir(lir_add_ll);
+}
+
+void jit_record_LIR_GUARD_TYPE_BOOL(int bool)
+{
+    lir_op_t *lir_guard_type_bool = initialize_lir_op();
+    if (bool)
+    {
+        lir_guard_type_bool->opcode = LIR_GUARD_TYPE_TRUE;
+    }
+    else
+    {
+        lir_guard_type_bool->opcode = LIR_GUARD_TYPE_FALSE;
+    }
+    jit_record_lir(lir_guard_type_bool);
 }

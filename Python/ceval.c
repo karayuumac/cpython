@@ -2363,6 +2363,32 @@ main_loop:
             DISPATCH();
         }
 
+            case TARGET(INPLACE_ADD_REC):
+            {
+                PyObject *right = POP();
+                PyObject *left = TOP();
+                PyObject *sum;
+                if (PyUnicode_CheckExact(left) && PyUnicode_CheckExact(right)) {
+                    sum = unicode_concatenate(tstate, left, right, f, next_instr);
+                    /* unicode_concatenate consumed the ref to left */
+                }
+                else {
+                    sum = PyNumber_InPlaceAdd(left, right);
+                    Py_DECREF(left);
+                }
+                Py_DECREF(right);
+                SET_TOP(sum);
+                if (sum == NULL)
+                    goto error;
+
+                if (PyLong_Check(right) && PyLong_Check(left))
+                {
+                    EMIT(LIR_LL_ADD_OVERFLOW);
+                }
+
+                DISPATCH();
+            }
+
         case TARGET(INPLACE_SUBTRACT): {
             PyObject *right = POP();
             PyObject *left = TOP();
@@ -3053,6 +3079,74 @@ main_loop:
             DISPATCH();
         }
 
+            case TARGET(LOAD_NAME_REC):
+            {
+                PyObject *name = GETITEM(names, oparg);
+                PyObject *locals = f->f_locals;
+                PyObject *v;
+                if (locals == NULL) {
+                    _PyErr_Format(tstate, PyExc_SystemError,
+                                  "no locals when loading %R", name);
+                    goto error;
+                }
+                if (PyDict_CheckExact(locals)) {
+                    v = PyDict_GetItemWithError(locals, name);
+                    if (v != NULL) {
+                        Py_INCREF(v);
+                    }
+                    else if (_PyErr_Occurred(tstate)) {
+                        goto error;
+                    }
+                }
+                else {
+                    v = PyObject_GetItem(locals, name);
+                    if (v == NULL) {
+                        if (!_PyErr_ExceptionMatches(tstate, PyExc_KeyError))
+                            goto error;
+                        _PyErr_Clear(tstate);
+                    }
+                }
+                if (v == NULL) {
+                    v = PyDict_GetItemWithError(f->f_globals, name);
+                    if (v != NULL) {
+                        Py_INCREF(v);
+                    }
+                    else if (_PyErr_Occurred(tstate)) {
+                        goto error;
+                    }
+                    else {
+                        if (PyDict_CheckExact(f->f_builtins)) {
+                            v = PyDict_GetItemWithError(f->f_builtins, name);
+                            if (v == NULL) {
+                                if (!_PyErr_Occurred(tstate)) {
+                                    format_exc_check_arg(
+                                            tstate, PyExc_NameError,
+                                            NAME_ERROR_MSG, name);
+                                }
+                                goto error;
+                            }
+                            Py_INCREF(v);
+                        }
+                        else {
+                            v = PyObject_GetItem(f->f_builtins, name);
+                            if (v == NULL) {
+                                if (_PyErr_ExceptionMatches(tstate, PyExc_KeyError)) {
+                                    format_exc_check_arg(
+                                                tstate, PyExc_NameError,
+                                                NAME_ERROR_MSG, name);
+                                }
+                                goto error;
+                            }
+                        }
+                    }
+                }
+                PUSH(v);
+
+                EMIT(LIR_ENV_LOAD_AND_PUSH, oparg);
+
+                DISPATCH();
+            }
+
         case TARGET(LOAD_GLOBAL): {
             PyObject *name;
             PyObject *v;
@@ -3710,6 +3804,23 @@ main_loop:
             DISPATCH();
         }
 
+            case TARGET(COMPARE_OP_REC):
+            {
+                assert(oparg <= Py_GE);
+                PyObject *right = POP();
+                PyObject *left = TOP();
+                PyObject *res = PyObject_RichCompare(left, right, oparg);
+                SET_TOP(res);
+                Py_DECREF(left);
+                Py_DECREF(right);
+                if (res == NULL)
+                    goto error;
+                PREDICT(POP_JUMP_IF_FALSE);
+                PREDICT(POP_JUMP_IF_TRUE);
+
+                DISPATCH();
+            }
+
         case TARGET(IS_OP): {
             PyObject *right = POP();
             PyObject *left = TOP();
@@ -3891,6 +4002,45 @@ main_loop:
                 goto error;
             DISPATCH();
         }
+
+            case TARGET(POP_JUMP_IF_TRUE_REC):
+            {
+                PREDICTED(POP_JUMP_IF_TRUE_REC);
+                PyObject *cond = POP();
+                int err;
+                if (Py_IsFalse(cond)) {
+                    Py_DECREF(cond);
+
+                    EMIT(LIR_GUARD_TYPE_BOOL, 0);
+
+                    DISPATCH();
+                }
+                if (Py_IsTrue(cond)) {
+                    Py_DECREF(cond);
+                    JUMPTO(oparg);
+
+                    EMIT(LIR_GUARD_TYPE_BOOL, 1);
+
+                    CHECK_EVAL_BREAKER();
+                    DISPATCH();
+                }
+                err = PyObject_IsTrue(cond);
+                Py_DECREF(cond);
+                if (err > 0) {
+                    JUMPTO(oparg);
+
+                    EMIT(LIR_GUARD_TYPE_BOOL, 1);
+
+                    CHECK_EVAL_BREAKER();
+                }
+                else if (err == 0)
+                {
+                    EMIT(LIR_GUARD_TYPE_BOOL, 0);
+                }
+                else
+                    goto error;
+                DISPATCH();
+            }
 
         case TARGET(JUMP_IF_FALSE_OR_POP): {
             PyObject *cond = TOP();

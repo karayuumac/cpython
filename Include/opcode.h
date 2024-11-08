@@ -140,6 +140,10 @@ extern "C" {
 #define LOAD_FAST_REC 201
 #define LOAD_CONST_REC 202
 #define STORE_NAME_REC 203
+#define LOAD_NAME_REC 204
+#define INPLACE_ADD_REC 205
+#define POP_JUMP_IF_TRUE_REC 206
+#define COMPARE_OP_REC 207
 #ifdef NEED_OPCODE_JUMP_TABLES
 static uint32_t _PyOpcode_RelativeJump[8] = {
     0U,

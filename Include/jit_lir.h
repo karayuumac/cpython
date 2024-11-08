@@ -14,6 +14,10 @@ typedef enum
 {
   /// 型チェックガード
   LIR_GUARD_TYPE_LL, // long long 型かどうか
+  LIR_GUARD_TYPE_TRUE, // True かどうか
+  LIR_GUARD_TYPE_FALSE, // False かどうか
+  LIR_GUARD_ADD_OVERFLOW_LL, // 足し算の結果が long long に収まるかどうか
+
   /// スタックプッシュ
   LIR_PUSH,
   /// スタックポップ
@@ -36,7 +40,7 @@ typedef enum
   LIR_STORE_NAME,
 
   /// 整数加算
-  LIR_ADD,
+  LIR_ADD_LL,
   /// 整数減算
   LIR_SUB,
   /// 整数乗算
@@ -130,6 +134,11 @@ struct lir_op
     int arg;
     lir_op_t *ref_op;
     long long ll;
+    struct
+    {
+      int lhs;
+      int rhs;
+    } operand;
   } oparg;
   /// 生成されたCコードにおけるレジスタ番号
   int register_index;
