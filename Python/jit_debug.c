@@ -158,6 +158,15 @@ char *get_lir_opcode_name(const lir_op_t *op)
     case LIR_ADD_LL: return "LIR_ADD_LL";
     case LIR_GUARD_TYPE_TRUE: return "LIR_GUARD_TYPE_TRUE";
     case LIR_GUARD_TYPE_FALSE: return "LIR_GUARD_TYPE_FALSE";
+    case LIR_GUARD_TYPE_NUM: return "LIR_GUARD_TYPE_NUM";
+    case LIR_EQ_NUM: return "LIR_EQ_NUM";
+    case LIR_GE_NUM: return "LIR_GE_NUM";
+    case LIR_GT_NUM: return "LIR_GT_NUM";
+    case LIR_LE_NUM: return "LIR_LE_NUM";
+    case LIR_LT_NUM: return "LIR_LT_NUM";
+    case LIR_NE_NUM: return "LIR_NE_NUM";
+    case LIR_EXIT: return "LIR_EXIT";
+    case LIR_COMMIT: return "LIR_COMMIT";
     default: return "UNKNOWN";
     }
 }

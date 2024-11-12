@@ -5,9 +5,28 @@
 #include "opcode.h"
 #include <dlfcn.h>
 
-/// トレースからLIRへの変換
-lir_code_t* generate_lir(trace_t* trace)
+/// LIR のレジスタ割当て
+void allocate_lir_register(trace_t* trace)
 {
+  /*
+  int reg_num = 0;
+  for (int i = 0; i < trace->lir_buffer.length; i++)
+  {
+    switch (trace->lir_buffer.lirs[i].opcode)
+    {
+    case LIR_PUSH:
+      trace->lir_buffer.lirs[i].reg.register_index = reg_num;
+      reg_num++;
+      break;
+
+    default:
+      continue;
+    }
+
+  }
+  */
+
+  /*
   lir_code_t* lir = lir_create();
   if (!lir) return NULL;
 
@@ -90,7 +109,6 @@ lir_code_t* generate_lir(trace_t* trace)
       lir_append_inst(lir->current, store);
       break;
 
-      /*
     case LOAD_FAST:
       {
         lir_inst_t* load = lir_new_inst(LIR_LOAD);
@@ -234,7 +252,6 @@ lir_code_t* generate_lir(trace_t* trace)
         lir->current = next;
         break;
       }
-      */
 
     default:
       lir_inst_t *exit = lir_new_inst(LIR_EXIT);
@@ -242,8 +259,8 @@ lir_code_t* generate_lir(trace_t* trace)
       lir_append_inst(lir->current, exit);
       return lir;
 
-      // TODO: その他命令の追加
     }
   }
   return lir;
+  */
 }

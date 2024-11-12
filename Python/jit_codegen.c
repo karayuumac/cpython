@@ -39,7 +39,7 @@ char* generate_operand_code(lir_operand_t *operand)
 }
 */
 
-char* generate_c_code(lir_code_t* lir, trace_t *trace)
+char* generate_c_code(trace_t *trace)
 {
   static char code[65536];
   char* p = code;
@@ -53,6 +53,23 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
                "    PyObject* v0 = NULL;\n"
                );
 
+  int reg_index = 1;
+  for (int i = 1; i < trace->lir_buffer.capacity; i++)
+  {
+    lir_op_t lir_op = trace->lir_buffer.lirs[i];
+
+    switch (lir_op.opcode)
+    {
+    case LIR_LOAD_CONST_LL:
+      p += sprintf(p,
+        "    long long v%d = %lld;\n",
+        reg_index, lir_op.oparg.ll);
+      reg_index++;
+      break;
+    }
+  }
+
+  /*
   // レジスタ変数の宣言
   for (int i = 1; i < lir->reg_count; i++)
   {
@@ -154,7 +171,6 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
                      insn->src2.u.type->tp_name,
                      insn->guard_exit);
         break;
-        */
 
       // TODO: その他命令に対する命令の処理を追加
       }
@@ -168,6 +184,7 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
   {
     last_reg = lir->reg_count - 1;
   }
+  */
 
   p += sprintf(p,
                "    return v%d;\n"
@@ -177,35 +194,24 @@ char* generate_c_code(lir_code_t* lir, trace_t *trace)
                "side_exit:\n"
                "    return NULL;\n"
                "}\n",
-               last_reg);
+               0);
 
   return code;
 }
 
 int jit_compile_trace(trace_t* trace)
 {
-  // LIRの生成
-  lir_code_t* lir = generate_lir(trace);
-  if (!lir) return -1;
+  // レジスタ割当て
+  allocate_lir_register(trace);
 
   // Cコードの生成
-  char* trace_code = generate_c_code(lir, trace);
-  if (!trace_code)
-  {
-    lir_free(lir);
-    return -1;
-  }
+  char* trace_code = generate_c_code(trace);
 
   printf("generated code:\n");
   printf(trace_code);
 
   // ソースコードを一時ファイルに書き出し
   FILE* f = fopen("/tmp/trace.c", "w");
-  if (!f)
-  {
-    lir_free(lir);
-    return -1;
-  }
   fputs(trace_code, f);
   fclose(f);
 
@@ -220,7 +226,6 @@ int jit_compile_trace(trace_t* trace)
   if (result != 0)
   {
     printf("Compilation failed: %s\n", compile_cmd); // デバッグ用
-    lir_free(lir);
     return -1;
   }
 
@@ -229,7 +234,6 @@ int jit_compile_trace(trace_t* trace)
   if (!handle)
   {
     printf("dlopen error: %s\n", dlerror()); // デバッグ用
-    lir_free(lir);
     return -1;
   }
 
@@ -238,12 +242,10 @@ int jit_compile_trace(trace_t* trace)
   if (!func)
   {
     dlclose(handle);
-    lir_free(lir);
     return -1;
   }
 
   // トレースにコンパイル済みコードを設定
   trace->compiled_code = func;
-  lir_free(lir);
   return 1;
 }

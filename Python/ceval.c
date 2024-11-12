@@ -1329,6 +1329,7 @@ eval_frame_handle_pending(PyThreadState *tstate)
         NEXTOPARG();                                                   \
         if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
         { \
+            EMIT(LIR_COMMIT); \
             goto *opcode_targets_rec[opcode]; \
         } \
         else \
@@ -2384,6 +2385,10 @@ main_loop:
                 if (PyLong_Check(right) && PyLong_Check(left))
                 {
                     EMIT(LIR_LL_ADD_OVERFLOW);
+                }
+                else
+                {
+                    EMIT(LIR_EXIT);
                 }
 
                 DISPATCH();
@@ -3818,11 +3823,21 @@ main_loop:
                 PREDICT(POP_JUMP_IF_FALSE);
                 PREDICT(POP_JUMP_IF_TRUE);
 
+                if ((PyLong_Check(right) || PyFloat_Check(right)) && (PyLong_Check(left) || PyFloat_Check(left)))
+                {
+                    EMIT(LIR_COMPARE_OP_NUM, oparg);
+                }
+                else
+                {
+                    EMIT(LIR_EXIT);
+                }
+
                 DISPATCH();
             }
 
-        case TARGET(IS_OP): {
-            PyObject *right = POP();
+        case TARGET(IS_OP):
+            {
+                PyObject *right = POP();
             PyObject *left = TOP();
             int res = Py_Is(left, right) ^ oparg;
             PyObject *b = res ? Py_True : Py_False;

@@ -72,9 +72,9 @@ int jit_check_guard(trace_guard_t *guard, PyObject *actual);
 void jit_record_lir(lir_op_t *lir_op) ;
 
 /// トレースからLIRへの変換
-lir_code_t *generate_lir(trace_t *trace);
+void allocate_lir_register(trace_t* trace);
 /// コード生成
-char* generate_c_code(lir_code_t* lir, trace_t* trace);
+char* generate_c_code(trace_t* trace);
 /// コンパイル
 int jit_compile_trace(trace_t* trace);
 

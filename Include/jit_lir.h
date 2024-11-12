@@ -14,6 +14,7 @@ typedef enum
 {
   /// 型チェックガード
   LIR_GUARD_TYPE_LL, // long long 型かどうか
+  LIR_GUARD_TYPE_NUM, // 数値型 (long long, float) かどうか
   LIR_GUARD_TYPE_TRUE, // True かどうか
   LIR_GUARD_TYPE_FALSE, // False かどうか
   LIR_GUARD_ADD_OVERFLOW_LL, // 足し算の結果が long long に収まるかどうか
@@ -30,96 +31,35 @@ typedef enum
   LIR_LOAD_CONST_LL,
 
   LIR_NOPE,
-  /// 定数ロード
-  LIR_CONST,
-  /// 名前ロード
-  LIR_LOAD_NAME,
-  /// 変数ロード
-  LIR_LOAD_STACK,
-  /// 変数ストア
-  LIR_STORE_NAME,
 
   /// 整数加算
   LIR_ADD_LL,
-  /// 整数減算
-  LIR_SUB,
-  /// 整数乗算
-  LIR_MUL,
-  /// 整数除算
-  LIR_DIV,
-  /// 剰余
-  LIR_MOD,
-  /// ビット論理積
-  LIR_AND,
-  /// ビット論理和
-  LIR_OR,
-  /// ビット排他的論理和
-  LIR_XOR,
-  /// 左シフト
-  LIR_SHL,
-  /// 右シフト
-  LIR_SHR,
-
-  /// 浮動小数点加算
-  LIR_FADD,
-  /// 浮動小数点減算
-  LIR_FSUB,
-  /// 浮動小数点乗算
-  LIR_FMUL,
-  /// 浮動小数点除算
-  LIR_FDIV,
 
   /// 等しい
-  LIR_EQ,
+  LIR_EQ_NUM,
   /// 等しくない
-  LIR_NE,
+  LIR_NE_NUM,
   /// より大きい
-  LIR_LT,
+  LIR_LT_NUM,
   /// 以下
-  LIR_LE,
+  LIR_LE_NUM,
   /// より大きい
-  LIR_GT,
+  LIR_GT_NUM,
   /// 以上
-  LIR_GE,
-
-  /// 型チェックガード
-  LIR_GUARD_TYPE,
-  /// オーバーフローガード
-  LIR_GUARD_ADD_LL_OVERFLOW,
-  LIR_GUARD_SUB_LL_OVERFLOW,
-  LIR_GUARD_MUL_LL_OVERFLOW,
-  /// 値の一致チェックガード
-  LIR_GUARD_VALUE,
-  /// クラスチェックガード
-  LIR_GUARD_CLASS,
-
-  /// 無条件ジャンプ
-  LIR_JUMP,
-  /// 条件分岐
-  LIR_BRANCH,
-  /// リターン
-  LIR_RETURN,
-  /// 例外
-  LIR_THROW,
-
-  /// 属性取得
-  LIR_GETATTR,
-  /// 属性設定
-  LIR_SETATTR,
-  /// 要素取得
-  LIR_GETITEM,
-  /// 要素設定
-  LIR_SETITEM,
-  /// グローバル変数取得
-  LIR_GETGLOBAL,
-  /// グローバル変数設定
-  LIR_SETGLOBAL,
-  /// メソッド呼び出し
-  LIR_CALL,
+  LIR_GE_NUM,
 
   /// サイドエグジット
   LIR_EXIT,
+
+  /// 状態の確定
+  LIR_COMMIT,
 } lir_opcode_t;
+
+/// レジスタタイプ
+typedef enum
+{
+  LL, FLOAT,
+} reg_type_t;
 
 /// LIR 命令
 typedef struct lir_op lir_op_t;
@@ -140,8 +80,14 @@ struct lir_op
       int rhs;
     } operand;
   } oparg;
-  /// 生成されたCコードにおけるレジスタ番号
-  int register_index;
+
+  struct
+  {
+    /// 生成されたCコードにおけるレジスタ番号
+    int register_index;
+    /// レジスタタイプ
+    reg_type_t type;
+  } reg;
 };
 
 /// ガードエラーの種類
