@@ -1305,7 +1305,7 @@ eval_frame_handle_pending(PyThreadState *tstate)
             trace_t *trace = jit_find_trace(f->f_code, f->f_lasti); \
             if (trace != NULL && trace->compiled_code != NULL) \
             { \
-                PyObject *result = jit_execute_trace(tstate, f, trace); \
+                PyObject *result = jit_execute_trace(tstate, f, trace, stack_pointer); \
                 if (result != NULL) \
                 { \
                     retval = result; \
@@ -1317,7 +1317,7 @@ eval_frame_handle_pending(PyThreadState *tstate)
                     goto dispatch_opcode; \
                 } \
             } \
-            PyJIT_CheckTraceHead(f); \
+            PyJIT_CheckTraceHead(f, stack_pointer); \
             if (jit_context && jit_context->state == TRACE_RECORDING) { \
                 PyJIT_RecordTrace(f, stack_pointer); \
             } \

@@ -146,7 +146,7 @@ PyAPI_FUNC(int) PyJIT_Initialize(void);
 
 PyAPI_FUNC(void) PyJIT_Finalize(void);
 
-PyAPI_FUNC(int) PyJIT_CheckTraceHead(PyFrameObject *frame);
+PyAPI_FUNC(int) PyJIT_CheckTraceHead(PyFrameObject *frame, PyObject **stack_pointer);
 
 PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer);
 

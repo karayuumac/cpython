@@ -37,7 +37,7 @@ trace_t *PyJIT_GetCurrentTrace(void) {
 }
 
 /// トレースヘッドのチェック
-int PyJIT_CheckTraceHead(PyFrameObject *frame) {
+int PyJIT_CheckTraceHead(PyFrameObject *frame, PyObject **stack_pointer) {
   if (jit_context == NULL || jit_context->state != TRACE_INACTIVE) {
     return 0;
   }
@@ -54,7 +54,7 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame) {
     if (jit_check_all_guards(existing_trace, frame))
     {
       // 既存トレースを実行
-      jit_execute_trace(PyThreadState_Get(), frame, existing_trace);
+      jit_execute_trace(PyThreadState_Get(), frame, existing_trace, stack_pointer);
       return 0;
     }
   }

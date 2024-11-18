@@ -83,8 +83,6 @@ struct lir_op
 
   struct
   {
-    /// 生成されたCコードにおけるレジスタ番号
-    int register_index;
     /// レジスタタイプ
     reg_type_t type;
   } reg;

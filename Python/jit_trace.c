@@ -508,14 +508,19 @@ int jit_optimize_trace(trace_t* trace)
 }
 
 /// トレースの実行を行う
-PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t* trace)
+PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t* trace, PyObject **stack_pointer)
 {
     jit_execution_context_t ctx = {
         .tstate = tstate,
         .frame = frame,
         .trace = trace,
-        .stack_pointer = frame->f_valuestack,
-        .error = 0
+        .stack_pointer = stack_pointer,
+        .error = 0,
+        // exit 時に備えて, 初期状態の環境で初期化しておく.
+        // COMMIT 命令でこの値を現在のフレームの環境に書き換える.
+        // exit 時には, この値でロールバックする.
+        .f_globals_on_exit = *frame->f_globals,
+        .f_locals_on_exit = *frame->f_locals,
     };
 
     // トレースの実行
@@ -535,7 +540,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
         frame->f_lasti = ctx.trace->current_offset;
 
         // 新しいトレースの記録を開始する
-        PyJIT_CheckTraceHead(frame);
+        PyJIT_CheckTraceHead(frame, stack_pointer);
 
         return NULL;
     }

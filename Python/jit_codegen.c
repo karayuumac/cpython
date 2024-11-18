@@ -5,7 +5,8 @@
 #include "jit_internal.h"
 #include "jit_runtime.h"
 #include <dlfcn.h>
-#include <opcode.h>
+#include <stdio.h>
+#include <string.h>
 
 #ifndef JIT_INCLUDE_PATHS
 #error "JIT_INCLUDE_PATHS is not defined. Check your Makefile."
@@ -39,21 +40,177 @@ char* generate_operand_code(lir_operand_t *operand)
 }
 */
 
+#define MAX_ELEMENT 100000
+
+typedef struct Reg_
+{
+  int reg_index;
+  reg_type_t type;
+} Reg;
+
+typedef struct Stack_
+{
+  Reg *stack[MAX_ELEMENT];
+  int sp;
+} Stack;
+
+void Stack_Construct(Stack* stack)
+{
+  stack->sp = 0;
+}
+
+int Stack_Push(Stack *stack, Reg *elem)
+{
+  if (stack->sp == MAX_ELEMENT)
+  {
+    return 0;
+  }
+  stack->stack[stack->sp] = elem;
+  stack->sp++;
+  return 1;
+}
+
+Reg *Stack_Pop(Stack *stack)
+{
+  if (stack->sp == 0)
+  {
+    return NULL;
+  }
+  stack->sp--;
+  return stack->stack[stack->sp];
+}
+
+typedef struct env_
+{
+  /// レジスタ
+  Reg *reg;
+  /// oparg で与えられる環境上のインデックス
+  int f_env_index;
+} env_t;
+
+typedef struct env_list_
+{
+  env_t *envs;
+  Py_ssize_t length;
+  Py_ssize_t capacity;
+  // ここまでは反映して良い index
+  Py_ssize_t commited_index;
+} env_list_t;
+
+env_list_t *initialize()
+{
+  env_list_t *env_list = PyMem_Malloc(sizeof(env_list_t));
+  env_list->capacity = JIT_INIT_BUFFER_SIZE;
+  env_list->length = 0;
+  env_list->commited_index = -1;
+  env_list->envs = PyMem_Malloc(sizeof(env_t) * JIT_INIT_BUFFER_SIZE);
+  return env_list;
+}
+
+void check_capacity(env_list_t *env_list)
+{
+  if (env_list->length >= env_list->capacity)
+  {
+    Py_ssize_t new_capacity = env_list->capacity * 2;
+    env_t *new_env_list = PyMem_Realloc(env_list->envs, sizeof(env_t) * new_capacity);
+    env_list->capacity = new_capacity;
+    env_list->envs = new_env_list;
+  }
+}
+
+void append(env_list_t *env_list, env_t *element)
+{
+  check_capacity(env_list);
+  env_list->envs[env_list->length] = *element;
+  env_list->length++;
+}
+
+void free_env(env_list_t *env_list)
+{
+  PyMem_Free(env_list->envs);
+  PyMem_Free(env_list);
+}
+
+void commit(env_list_t *env_list)
+{
+  env_list->commited_index = env_list->length - 1;
+}
+
+char* reg_to_py_object(Reg *reg)
+{
+  char *c = PyMem_Malloc(sizeof(char) * 256);
+  switch (reg->type)
+  {
+  case LL:
+    sprintf(c, "Py_BuildValue(\"L\", v%d)", reg->reg_index);
+    break;
+  }
+  return c;
+}
+
+char* commit_f_locals(env_list_t *f_locals)
+{
+  char *c = PyMem_Malloc(sizeof(char) * 65536);
+  c += sprintf(c,
+    "    if (PyDict_CheckExact(ns)) {\n"
+    );
+
+  for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
+  {
+    env_t env = f_locals->envs[i];
+    char *py_obj = reg_to_py_object(env.reg);
+    c += printf(c,
+      "        PyDict_SetItem(ns, GETITEM(names, %d), %s);\n",
+      env.f_env_index, py_obj);
+    PyMem_Free(py_obj);
+  }
+
+  c += printf(c,
+    "    } else {\n"
+    );
+
+  for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
+  {
+    env_t env = f_locals->envs[i];
+    char *py_obj = reg_to_py_object(env.reg);
+    c += printf(c,
+      "        PyDict_SetItem(ns, GETITEM(names, %d), %s);\n",
+      env.f_env_index, py_obj);
+    PyMem_Free(py_obj);
+  }
+
+  return c;
+}
+
 char* generate_c_code(trace_t *trace)
 {
-  static char code[65536];
+  static char code[655360];
+  static char exit[300000];
   char* p = code;
+  char* exit_p = exit;
+
+  Stack *value_stack = PyMem_Malloc(sizeof(Stack));
+  Stack_Construct(value_stack);
+
+  env_list_t *f_locals = initialize();
 
   // ヘッダーとインクルード
   p += sprintf(p,
+               "#include \"Python.h\"\n"
                "#include \"jit_internal.h\"\n"
                "#include \"jit_runtime.h\"\n"
                "\n"
+               "#define GETITEM(v, i) PyTuple_GET_ITEM((v), (i))\n" // TODO: 速度向上のため, name をストアすることを検討する
                "PyObject* trace_func(jit_execution_context_t* ctx) {\n"
+               "    PyObject *ns = ctx->frame->f_locals;\n"
+               "    PyObject *names = ctx->frame->f_code->co_names;\n"
                "    PyObject* v0 = NULL;\n"
                );
 
   int reg_index = 1;
+  int prev_reg = -1;
+  int label_index = 0;
+  Reg *popped_reg;
   for (int i = 1; i < trace->lir_buffer.capacity; i++)
   {
     lir_op_t lir_op = trace->lir_buffer.lirs[i];
@@ -64,137 +221,85 @@ char* generate_c_code(trace_t *trace)
       p += sprintf(p,
         "    long long v%d = %lld;\n",
         reg_index, lir_op.oparg.ll);
+      prev_reg = reg_index;
       reg_index++;
+      break;
+
+    case LIR_PUSH:
+      assert(prev_reg != -1);
+
+      Reg *reg = PyMem_Malloc(sizeof(Reg));
+      reg->reg_index = prev_reg;
+      reg->type = lir_op.reg.type;
+
+      Stack_Push(value_stack, reg);
+      break;
+
+    case LIR_POP:
+      popped_reg = Stack_Pop(value_stack);
+      if (popped_reg == NULL)
+      {
+        break;
+      }
+      // printf("popped! reg: %d\n", popped_reg->reg_index);
+      break;
+
+    case LIR_COMMIT:
+      // 反映を確定
+      commit(f_locals);
+      break;
+
+    case LIR_ENV_STORE:
+      assert(popped_reg != NULL);
+
+      // 環境への格納
+      env_t *env = PyMem_Malloc(sizeof(env_t));
+      env->reg = popped_reg;
+      env->f_env_index = lir_op.oparg.arg;
+      append(f_locals, env);
+
+      break;
+
+    case LIR_EXIT:
+      p += sprintf(p,
+        "    goto L%d;\n"
+        , label_index);
+      exit_p += sprintf(exit_p,
+        "L%d:\n"
+        "    ctx->error = 1;\n"
+        "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
+        "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
+        , label_index);
+      label_index++;
+
+      while ((popped_reg = Stack_Pop(value_stack)) != NULL)
+      {
+        exit_p += printf(exit_p,
+          "    *ctx->stack_pointer++ = %s;\n",
+          reg_to_py_object(popped_reg));
+      }
+
+      strcat(exit_p, commit_f_locals(f_locals));
+
       break;
     }
   }
 
-  /*
-  // レジスタ変数の宣言
-  for (int i = 1; i < lir->reg_count; i++)
-  {
-    p += sprintf(p, "    PyObject* v%d = NULL;\n", i);
-  }
-  p += sprintf(p, "\n");
-
-  // LIR命令をランタイム関数呼び出しに変換
-  lir_block_t* block = lir->entry;
-  while (block)
-  {
-    p += sprintf(p, "L%d:\n", block->label);
-
-    lir_inst_t* inst = block->first;
-    while (inst)
-    {
-      switch (inst->opcode)
-      {
-      case LIR_CONST:
-        p += sprintf(p,
-          "    v%d = PyTuple_GET_ITEM((PyTupleObject *) ctx->frame->f_code->co_consts, %d);\n",
-          inst->dest.u.reg_num,
-          inst->src1.u.heap_index
-        );
-        break;
-
-      case LIR_LOAD_NAME:
-        p += sprintf(p,
-          "    v%d = PyTuple_GET_ITEM((PyTupleObject *) ctx->frame->f_code->co_names, %d);\n",
-          inst->dest.u.reg_num,
-          inst->src1.u.heap_index
-        );
-        break;
-
-
-      case LIR_STORE_NAME:
-        p += sprintf(p,
-          "    {\n"
-          "        PyObject *name = v%d;\n"
-          "        PyObject *value = v%d;\n"
-          "        PyObject *ns = ctx->frame->f_locals;\n"
-          "        int err;\n"
-          "        if (ns == NULL) {\n"
-          "            goto error;\n"
-          "        }\n"
-          "        if (PyDict_CheckExact(ns))\n"
-          "            err = PyDict_SetItem(ns, name, value);\n"
-          "        else\n"
-          "            err = PyObject_SetItem(ns, name, value);\n"
-          "        Py_DECREF(value);\n"
-          "        if (err != 0)\n"
-          "            goto error;\n"
-          "    }\n",
-          inst->src1.u.reg_num,
-          inst->src2.u.reg_num
-        );
-
-      case LIR_LOAD_STACK:
-        assert(insn->src1.kind == OPERAND_STACK);
-        p += sprintf(p,
-          "    {\n"
-          "        v%d = ctx->frame->f_valuestack[%d];\n"
-          "        Py_INCREF(v%d);\n"
-          "    }\n",
-          inst->dest.u.reg_num,
-          inst->src1.u.stack_pos,
-          inst->dest.u.reg_num
-          );
-
-      case LIR_EXIT:
-        p += sprintf(p,
-          "    ctx->frame->f_lasti = %d;\n"
-          "    goto error;\n",
-          inst->src1.u.label);
-
-      default:
-        break;
-
-        /*
-
-      case LIR_ADD:
-        p += sprintf(p,
-                     "    v%d = jit_binary_add(v%d, v%d);\n"
-                     "    if (v%d == NULL) goto error;\n",
-                     insn->dest.u.reg_num,
-                     insn->src1.u.reg_num,
-                     insn->src2.u.reg_num,
-                     insn->dest.u.reg_num);
-        break;
-
-      case LIR_GUARD_TYPE:
-        p += sprintf(p,
-                     "    if (!jit_check_type(v%d, %s)) {\n"
-                     "        ctx->error = GUARD_ERROR_TYPE;\n"
-                     "        ctx->exit_trace = %p;\n"
-                     "        goto side_exit;\n"
-                     "    }\n",
-                     insn->src1.u.reg_num,
-                     insn->src2.u.type->tp_name,
-                     insn->guard_exit);
-        break;
-
-      // TODO: その他命令に対する命令の処理を追加
-      }
-      inst = inst->next;
-    }
-    block = block->next;
-  }
-
-  int last_reg = 0;
-  if (lir->reg_count != 0)
-  {
-    last_reg = lir->reg_count - 1;
-  }
-  */
-
+  strcat(p, commit_f_locals(f_locals));
   p += sprintf(p,
-               "    return v%d;\n"
-               "error:\n"
-               "    ctx->error = 1;\n"
-               "    return NULL;\n"
-               "side_exit:\n"
-               "    return NULL;\n"
-               "}\n",
+               "    return v%d;\n",
+               // "error:\n"
+               // "    ctx->error = 1;\n"
+               // "    return NULL;\n"
+               // "side_exit:\n"
+               // "    return NULL;\n"
                0);
+
+  strcat(p, exit_p);
+
+  p += sprintf(p, "}\n");
+
+  free_env(f_locals);
 
   return code;
 }

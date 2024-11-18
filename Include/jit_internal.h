@@ -34,12 +34,14 @@ typedef struct jit_context {
 extern jit_context_t *jit_context;
 
 /// トレース実行用のコンテキスト
-typedef struct {
+typedef struct jit_execution_context {
   PyThreadState *tstate;
   PyFrameObject *frame;
   trace_t *trace;
   PyObject **stack_pointer;
   int error;
+  PyObject f_globals_on_exit;
+  PyObject f_locals_on_exit;
 } jit_execution_context_t;
 
 // 内部関数
@@ -65,7 +67,7 @@ void jit_clear_trace_cache(void);
 
 int jit_optimize_trace(trace_t *trace);
 int jit_compile_trace(trace_t *trace);
-PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace);
+PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace, PyObject **stack_pointer);
 int jit_check_all_guards(trace_t *trace, PyFrameObject *frame);
 int jit_check_guard(trace_guard_t *guard, PyObject *actual);
 
@@ -75,7 +77,5 @@ void jit_record_lir(lir_op_t *lir_op) ;
 void allocate_lir_register(trace_t* trace);
 /// コード生成
 char* generate_c_code(trace_t* trace);
-/// コンパイル
-int jit_compile_trace(trace_t* trace);
 
 #endif //CPYTHON_JIT_INTERNAL_H
