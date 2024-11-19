@@ -45,7 +45,7 @@ char* generate_operand_code(lir_operand_t *operand)
 typedef struct Reg_
 {
   int reg_index;
-  reg_type_t type;
+  // reg_type_t type;
 } Reg;
 
 typedef struct Stack_
@@ -136,13 +136,13 @@ void commit(env_list_t *env_list)
   env_list->commited_index = env_list->length - 1;
 }
 
-char* reg_to_py_object(Reg *reg)
+char* reg_to_py_object(int reg_index, reg_type_t type)
 {
   char *c = PyMem_Malloc(sizeof(char) * 256);
-  switch (reg->type)
+  switch (type)
   {
   case LL:
-    sprintf(c, "Py_BuildValue(\"L\", v%d)", reg->reg_index);
+    sprintf(c, "Py_BuildValue(\"L\", v%d)", reg_index);
     break;
   }
   return c;
@@ -158,11 +158,9 @@ char* commit_f_locals(env_list_t *f_locals)
   for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
-    char *py_obj = reg_to_py_object(env.reg);
     c += printf(c,
-      "        PyDict_SetItem(ns, GETITEM(names, %d), %s);\n",
-      env.f_env_index, py_obj);
-    PyMem_Free(py_obj);
+      "        PyDict_SetItem(ns, GETITEM(names, %d), v%d);\n",
+      env.f_env_index, env.reg->reg_index);
   }
 
   c += printf(c,
@@ -172,11 +170,9 @@ char* commit_f_locals(env_list_t *f_locals)
   for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
-    char *py_obj = reg_to_py_object(env.reg);
     c += printf(c,
-      "        PyDict_SetItem(ns, GETITEM(names, %d), %s);\n",
-      env.f_env_index, py_obj);
-    PyMem_Free(py_obj);
+      "        PyDict_SetItem(ns, GETITEM(names, %d), v%d);\n",
+      env.f_env_index, env.reg->reg_index);
   }
 
   return c;
@@ -196,7 +192,6 @@ char* generate_c_code(trace_t *trace)
 
   // ヘッダーとインクルード
   p += sprintf(p,
-               "#include \"Python.h\"\n"
                "#include \"jit_internal.h\"\n"
                "#include \"jit_runtime.h\"\n"
                "\n"
@@ -204,7 +199,7 @@ char* generate_c_code(trace_t *trace)
                "PyObject* trace_func(jit_execution_context_t* ctx) {\n"
                "    PyObject *ns = ctx->frame->f_locals;\n"
                "    PyObject *names = ctx->frame->f_code->co_names;\n"
-               "    PyObject* v0 = NULL;\n"
+               "    PyObject *v0 = NULL;\n"
                );
 
   int reg_index = 1;
@@ -219,7 +214,7 @@ char* generate_c_code(trace_t *trace)
     {
     case LIR_LOAD_CONST_LL:
       p += sprintf(p,
-        "    long long v%d = %lld;\n",
+        "    PyObject *v%d = Py_BuildValue(\"L\", %lld);\n",
         reg_index, lir_op.oparg.ll);
       prev_reg = reg_index;
       reg_index++;
@@ -230,7 +225,7 @@ char* generate_c_code(trace_t *trace)
 
       Reg *reg = PyMem_Malloc(sizeof(Reg));
       reg->reg_index = prev_reg;
-      reg->type = lir_op.reg.type;
+      // reg->type = lir_op.reg.type;
 
       Stack_Push(value_stack, reg);
       break;
@@ -257,7 +252,10 @@ char* generate_c_code(trace_t *trace)
       env->reg = popped_reg;
       env->f_env_index = lir_op.oparg.arg;
       append(f_locals, env);
+      break;
 
+    case LIR_GUARD_TYPE_LL:
+      assert(popped_reg != NULL);
       break;
 
     case LIR_EXIT:
@@ -275,11 +273,11 @@ char* generate_c_code(trace_t *trace)
       while ((popped_reg = Stack_Pop(value_stack)) != NULL)
       {
         exit_p += printf(exit_p,
-          "    *ctx->stack_pointer++ = %s;\n",
-          reg_to_py_object(popped_reg));
+          "    *ctx->stack_pointer++ = v%d;\n",
+          popped_reg->reg_index);
       }
 
-      strcat(exit_p, commit_f_locals(f_locals));
+      exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
 
       break;
     }
@@ -295,8 +293,7 @@ char* generate_c_code(trace_t *trace)
                // "    return NULL;\n"
                0);
 
-  strcat(p, exit_p);
-
+  p += sprintf(p, "%s", exit);
   p += sprintf(p, "}\n");
 
   free_env(f_locals);
@@ -323,8 +320,8 @@ int jit_compile_trace(trace_t* trace)
   // コンパイルコマンドの生成
   char compile_cmd[1024];
   snprintf(compile_cmd, sizeof(compile_cmd),
-        "cc -O2 -fPIC -shared %s "
-        "/tmp/trace.c -o /tmp/trace.so", JIT_INCLUDE_PATHS);
+        "cc -O2 -fPIC -v /tmp/trace.c -shared %s "
+        "-o /tmp/trace.so", JIT_INCLUDE_PATHS);
 
   // コンパイル実行
   int result = system(compile_cmd);
