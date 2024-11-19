@@ -25,9 +25,9 @@ static int jit_check_type(PyObject* obj, PyTypeObject* type) {
 }
 
 static int jit_check_overflow_add(PyObject* a, PyObject* b) {
-  long va = PyLong_AsLong(a);
-  long vb = PyLong_AsLong(b);
-  return (va > 0 && vb > 0 && va > LONG_MAX - vb);
+  long long va = PyLong_AsLongLong(a);
+  long long vb = PyLong_AsLongLong(b);
+  return (va >= 0 && vb <= LONG_LONG_MAX - va) || (va < 0 && LONG_LONG_MIN - va <= vb);
 }
 
 #endif //JIT_RUNTIME_H

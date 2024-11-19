@@ -52,11 +52,13 @@ typedef struct Stack_
 {
   Reg *stack[MAX_ELEMENT];
   int sp;
+  int peek_sp;
 } Stack;
 
 void Stack_Construct(Stack* stack)
 {
   stack->sp = 0;
+  stack->peek_sp = 0;
 }
 
 int Stack_Push(Stack *stack, Reg *elem)
@@ -67,6 +69,7 @@ int Stack_Push(Stack *stack, Reg *elem)
   }
   stack->stack[stack->sp] = elem;
   stack->sp++;
+  stack->peek_sp++;
   return 1;
 }
 
@@ -78,6 +81,26 @@ Reg *Stack_Pop(Stack *stack)
   }
   stack->sp--;
   return stack->stack[stack->sp];
+}
+
+Reg *Stack_Peek_And_Move(Stack *stack)
+{
+  if (stack->peek_sp == 0)
+  {
+    return NULL;
+  }
+  stack->peek_sp--;
+  return stack->stack[stack->peek_sp];
+}
+
+void Stack_Peek_Restore(Stack *stack)
+{
+  stack->peek_sp = stack->sp;
+}
+
+Reg *Stack_Peek(Stack *stack)
+{
+  return stack->stack[stack->sp - 1];
 }
 
 typedef struct env_
@@ -188,6 +211,9 @@ char* generate_c_code(trace_t *trace)
   Stack *value_stack = PyMem_Malloc(sizeof(Stack));
   Stack_Construct(value_stack);
 
+  Stack *popped_reg_stack = PyMem_Malloc(sizeof(Stack));
+  Stack_Construct(popped_reg_stack);
+
   env_list_t *f_locals = initialize();
 
   // ヘッダーとインクルード
@@ -205,7 +231,6 @@ char* generate_c_code(trace_t *trace)
   int reg_index = 1;
   int prev_reg = -1;
   int label_index = 0;
-  Reg *popped_reg;
   for (int i = 1; i < trace->lir_buffer.capacity; i++)
   {
     lir_op_t lir_op = trace->lir_buffer.lirs[i];
@@ -213,73 +238,165 @@ char* generate_c_code(trace_t *trace)
     switch (lir_op.opcode)
     {
     case LIR_LOAD_CONST_LL:
-      p += sprintf(p,
-        "    PyObject *v%d = Py_BuildValue(\"L\", %lld);\n",
-        reg_index, lir_op.oparg.ll);
-      prev_reg = reg_index;
-      reg_index++;
-      break;
-
-    case LIR_PUSH:
-      assert(prev_reg != -1);
-
-      Reg *reg = PyMem_Malloc(sizeof(Reg));
-      reg->reg_index = prev_reg;
-      // reg->type = lir_op.reg.type;
-
-      Stack_Push(value_stack, reg);
-      break;
-
-    case LIR_POP:
-      popped_reg = Stack_Pop(value_stack);
-      if (popped_reg == NULL)
       {
+        p += sprintf(p,
+          "    PyObject *v%d = Py_BuildValue(\"L\", %lld);\n",
+          reg_index, lir_op.oparg.ll);
+        prev_reg = reg_index;
+        reg_index++;
         break;
       }
-      // printf("popped! reg: %d\n", popped_reg->reg_index);
-      break;
 
-    case LIR_COMMIT:
-      // 反映を確定
-      commit(f_locals);
-      break;
-
-    case LIR_ENV_STORE:
-      assert(popped_reg != NULL);
-
-      // 環境への格納
-      env_t *env = PyMem_Malloc(sizeof(env_t));
-      env->reg = popped_reg;
-      env->f_env_index = lir_op.oparg.arg;
-      append(f_locals, env);
-      break;
-
-    case LIR_GUARD_TYPE_LL:
-      assert(popped_reg != NULL);
-      break;
-
-    case LIR_EXIT:
-      p += sprintf(p,
-        "    goto L%d;\n"
-        , label_index);
-      exit_p += sprintf(exit_p,
-        "L%d:\n"
-        "    ctx->error = 1;\n"
-        "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
-        "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
-        , label_index);
-      label_index++;
-
-      while ((popped_reg = Stack_Pop(value_stack)) != NULL)
+    case LIR_PUSH:
       {
-        exit_p += printf(exit_p,
-          "    *ctx->stack_pointer++ = v%d;\n",
-          popped_reg->reg_index);
+        assert(prev_reg != -1);
+
+        Reg *reg = PyMem_Malloc(sizeof(Reg));
+        reg->reg_index = prev_reg;
+        // reg->type = lir_op.reg.type;
+
+        Stack_Push(value_stack, reg);
+        break;
       }
 
-      exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+    case LIR_POP:
+      {
+        Reg* elem = Stack_Pop(value_stack);
+        assert(elem != NULL);
+        Stack_Push(popped_reg_stack, elem);
+        // printf("popped! reg: %d\n", popped_reg->reg_index);
+        break;
+      }
 
-      break;
+    case LIR_COMMIT:
+      {
+        // 反映を確定
+        commit(f_locals);
+        break;
+      }
+
+    case LIR_ENV_STORE:
+      {
+        Reg* popped_reg = Stack_Pop(popped_reg_stack);
+        assert(popped_reg != NULL);
+
+        // 環境への格納
+        env_t *env = PyMem_Malloc(sizeof(env_t));
+        env->reg = popped_reg;
+        env->f_env_index = lir_op.oparg.arg;
+        append(f_locals, env);
+
+        // TODO: ENV_STORE時に環境を書き換える？
+
+        break;
+      }
+
+    case LIR_ENV_LOAD:
+      {
+        // TODO: f_globals, f_builtins の取り扱いは？
+        p += sprintf(p,
+          "    PyObject *v%d;"
+          "    if (PyDict_CheckExact(locals)) {\n"
+          "        v%d = PyDict_GetItemWithError(locals, GETITEM(names, %d));\n"
+          "    } else {\n"
+          "        v%d = PyObject_GetItem(locals, GETITEM(names, %d));\n"
+          "    }\n",
+          reg_index, reg_index, lir_op.oparg.arg, reg_index, lir_op.oparg.arg);
+
+        prev_reg = reg_index;
+        reg_index++;
+        break;
+      }
+
+    case LIR_GUARD_TYPE_LL:
+      {
+        Reg* peeked_reg = Stack_Peek(popped_reg_stack);
+        assert(popped_reg != NULL);
+        p += sprintf(p,
+          "    if (!PyLong_Check(v%d)) {\n"
+          "        goto L%d;\n"
+          "    }\n",
+          peeked_reg->reg_index, label_index);
+        exit_p += sprintf(exit_p,
+          "L%d:\n"
+          "    ctx->error = 1;\n"
+          "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
+          "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
+          , label_index);
+        label_index++;
+
+        Reg* temp_reg;
+        while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
+        {
+          exit_p += printf(exit_p,
+            "    *ctx->stack_pointer++ = v%d;\n",
+            temp_reg->reg_index);
+        }
+        Stack_Peek_Restore(value_stack);
+
+        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+        break;
+      }
+
+    case LIR_GUARD_ADD_OVERFLOW_LL:
+      {
+        Reg *r2 = Stack_Peek_And_Move(popped_reg_stack);
+        Reg *r1 = Stack_Peek_And_Move(popped_reg_stack);
+
+        p += sprintf(p,
+          "    if (!jit_check_overflow_add(v%d, v%d) {\n"
+          "        goto %d;\n"
+          "    }",
+          r1->reg_index, r2->reg_index, label_index);
+        Stack_Peek_Restore(popped_reg_stack);
+
+        exit_p += sprintf(exit_p,
+          "L%d:\n"
+          "    ctx->error = 1;\n"
+          "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
+          "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
+          , label_index);
+        label_index++;
+
+        Reg* temp_reg;
+        while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
+        {
+          exit_p += printf(exit_p,
+            "    *ctx->stack_pointer++ = v%d;\n",
+            temp_reg->reg_index);
+        }
+        Stack_Peek_Restore(value_stack);
+
+        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+        break;
+      }
+
+    case LIR_EXIT:
+      {
+        p += sprintf(p,
+          "    goto L%d;\n"
+          , label_index);
+        exit_p += sprintf(exit_p,
+          "L%d:\n"
+          "    ctx->error = 1;\n"
+          "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
+          "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
+          , label_index);
+        label_index++;
+
+        Reg* temp_reg;
+        while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
+        {
+          exit_p += printf(exit_p,
+            "    *ctx->stack_pointer++ = v%d;\n",
+            temp_reg->reg_index);
+        }
+        Stack_Peek_Restore(value_stack);
+
+        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+
+        break;
+      }
     }
   }
 
@@ -320,7 +437,7 @@ int jit_compile_trace(trace_t* trace)
   // コンパイルコマンドの生成
   char compile_cmd[1024];
   snprintf(compile_cmd, sizeof(compile_cmd),
-        "cc -O2 -fPIC -v /tmp/trace.c -shared %s "
+        "cc -O2 -fPIC /tmp/trace.c -shared %s "
         "-o /tmp/trace.so", JIT_INCLUDE_PATHS);
 
   // コンパイル実行
