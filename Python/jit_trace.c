@@ -516,6 +516,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
         .trace = trace,
         .stack_pointer = stack_pointer,
         .error = 0,
+        .exit_on = -1,
         // exit 時に備えて, 初期状態の環境で初期化しておく.
         // COMMIT 命令でこの値を現在のフレームの環境に書き換える.
         // exit 時には, この値でロールバックする.
@@ -528,6 +529,7 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
 
     if (ctx.error)
     {
+        printf("exit_on: %d\n", ctx.exit_on);
         if (PyErr_Occurred())
         {
             return NULL;

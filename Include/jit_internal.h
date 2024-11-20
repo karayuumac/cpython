@@ -40,6 +40,7 @@ typedef struct jit_execution_context {
   trace_t *trace;
   PyObject **stack_pointer;
   int error;
+  int exit_on;
   PyObject f_globals_on_exit;
   PyObject f_locals_on_exit;
 } jit_execution_context_t;

@@ -80,6 +80,7 @@ Reg *Stack_Pop(Stack *stack)
     return NULL;
   }
   stack->sp--;
+  stack->peek_sp--;
   return stack->stack[stack->sp];
 }
 
@@ -100,6 +101,10 @@ void Stack_Peek_Restore(Stack *stack)
 
 Reg *Stack_Peek(Stack *stack)
 {
+  if (stack->sp == 0)
+  {
+    return NULL;
+  }
   return stack->stack[stack->sp - 1];
 }
 
@@ -117,6 +122,7 @@ typedef struct env_list_
   Py_ssize_t length;
   Py_ssize_t capacity;
   // ここまでは反映して良い index
+  Py_ssize_t last_commited_index;
   Py_ssize_t commited_index;
 } env_list_t;
 
@@ -125,6 +131,7 @@ env_list_t *initialize()
   env_list_t *env_list = PyMem_Malloc(sizeof(env_list_t));
   env_list->capacity = JIT_INIT_BUFFER_SIZE;
   env_list->length = 0;
+  env_list->last_commited_index = -1;
   env_list->commited_index = -1;
   env_list->envs = PyMem_Malloc(sizeof(env_t) * JIT_INIT_BUFFER_SIZE);
   return env_list;
@@ -178,7 +185,7 @@ char* commit_f_locals(env_list_t *f_locals)
     "    if (PyDict_CheckExact(ns)) {\n"
     );
 
-  for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
+  for (Py_ssize_t i = f_locals->last_commited_index + 1; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
     c += printf(c,
@@ -190,7 +197,7 @@ char* commit_f_locals(env_list_t *f_locals)
     "    } else {\n"
     );
 
-  for (Py_ssize_t i = 0; i <= f_locals->commited_index; i++)
+  for (Py_ssize_t i = f_locals->last_commited_index + 1; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
     c += printf(c,
@@ -198,13 +205,15 @@ char* commit_f_locals(env_list_t *f_locals)
       env.f_env_index, env.reg->reg_index);
   }
 
+  f_locals->last_commited_index = f_locals->commited_index;
+
   return c;
 }
 
 char* generate_c_code(trace_t *trace)
 {
-  static char code[655360];
-  static char exit[300000];
+  static char code[6553600];
+  static char exit[3000000];
   char* p = code;
   char* exit_p = exit;
 
@@ -223,7 +232,7 @@ char* generate_c_code(trace_t *trace)
                "\n"
                "#define GETITEM(v, i) PyTuple_GET_ITEM((v), (i))\n" // TODO: 速度向上のため, name をストアすることを検討する
                "PyObject* trace_func(jit_execution_context_t* ctx) {\n"
-               "    PyObject *ns = ctx->frame->f_locals;\n"
+               "    PyObject *locals = ctx->frame->f_locals;\n"
                "    PyObject *names = ctx->frame->f_code->co_names;\n"
                "    PyObject *v0 = NULL;\n"
                );
@@ -231,7 +240,7 @@ char* generate_c_code(trace_t *trace)
   int reg_index = 1;
   int prev_reg = -1;
   int label_index = 0;
-  for (int i = 1; i < trace->lir_buffer.capacity; i++)
+  for (int i = 1; i < trace->lir_buffer.length; i++)
   {
     lir_op_t lir_op = trace->lir_buffer.lirs[i];
 
@@ -272,6 +281,10 @@ char* generate_c_code(trace_t *trace)
       {
         // 反映を確定
         commit(f_locals);
+
+        // TODO: f_locals_on_exitの書き換えが必要？
+        p += sprintf(p, "%s", commit_f_locals(f_locals));
+
         break;
       }
 
@@ -286,7 +299,7 @@ char* generate_c_code(trace_t *trace)
         env->f_env_index = lir_op.oparg.arg;
         append(f_locals, env);
 
-        // TODO: ENV_STORE時に環境を書き換える？
+        // TODO: ENV_STORE時に環境を書き換える？ -> いらない気がする
 
         break;
       }
@@ -295,7 +308,7 @@ char* generate_c_code(trace_t *trace)
       {
         // TODO: f_globals, f_builtins の取り扱いは？
         p += sprintf(p,
-          "    PyObject *v%d;"
+          "    PyObject *v%d;\n"
           "    if (PyDict_CheckExact(locals)) {\n"
           "        v%d = PyDict_GetItemWithError(locals, GETITEM(names, %d));\n"
           "    } else {\n"
@@ -320,21 +333,55 @@ char* generate_c_code(trace_t *trace)
         exit_p += sprintf(exit_p,
           "L%d:\n"
           "    ctx->error = 1;\n"
+          "    ctx->exit_on = %d;\n"
           "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
           "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
-          , label_index);
+          ,label_index, label_index);
         label_index++;
 
         Reg* temp_reg;
         while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
         {
-          exit_p += printf(exit_p,
+          exit_p += sprintf(exit_p,
             "    *ctx->stack_pointer++ = v%d;\n",
             temp_reg->reg_index);
         }
         Stack_Peek_Restore(value_stack);
 
-        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+        exit_p += sprintf(exit_p,
+            "    return NULL;\n");
+        break;
+      }
+
+    case LIR_GUARD_TYPE_TRUE:
+      {
+        Reg* peeked_reg = Stack_Peek(popped_reg_stack);
+        assert(popped_reg != NULL);
+        p += sprintf(p,
+          "    if (!PyBool_Check(v%d) || v%d != Py_True) {\n"
+          "        goto L%d;\n"
+          "    }\n",
+          peeked_reg->reg_index, peeked_reg->reg_index, label_index);
+        exit_p += sprintf(exit_p,
+          "L%d:\n"
+          "    ctx->error = 1;\n"
+          "    ctx->exit_on = %d;\n"
+          "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
+          "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
+          , label_index, label_index);
+        label_index++;
+
+        Reg* temp_reg;
+        while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
+        {
+          exit_p += sprintf(exit_p,
+            "    *ctx->stack_pointer++ = v%d;\n",
+            temp_reg->reg_index);
+        }
+        Stack_Peek_Restore(value_stack);
+
+        exit_p += sprintf(exit_p,
+            "    return NULL;\n");
         break;
       }
 
@@ -344,30 +391,56 @@ char* generate_c_code(trace_t *trace)
         Reg *r1 = Stack_Peek_And_Move(popped_reg_stack);
 
         p += sprintf(p,
-          "    if (!jit_check_overflow_add(v%d, v%d) {\n"
-          "        goto %d;\n"
-          "    }",
+          "    if (!jit_check_overflow_add(v%d, v%d)) {\n"
+          "        goto L%d;\n"
+          "    }\n",
           r1->reg_index, r2->reg_index, label_index);
         Stack_Peek_Restore(popped_reg_stack);
 
         exit_p += sprintf(exit_p,
           "L%d:\n"
           "    ctx->error = 1;\n"
+          "    ctx->exit_on = %d;\n"
           "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
           "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
-          , label_index);
+          , label_index, label_index);
         label_index++;
 
         Reg* temp_reg;
         while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
         {
-          exit_p += printf(exit_p,
+          exit_p += sprintf(exit_p,
             "    *ctx->stack_pointer++ = v%d;\n",
             temp_reg->reg_index);
         }
         Stack_Peek_Restore(value_stack);
 
-        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+        exit_p += sprintf(exit_p,
+            "    return NULL;\n");
+        break;
+      }
+
+    case LIR_ADD_LL:
+      {
+        Reg *r2 = Stack_Pop(popped_reg_stack);
+        Reg *r1 = Stack_Pop(popped_reg_stack);
+        p += sprintf(p,
+          "    PyObject *v%d = Py_BuildValue(\"L\", PyLong_AsLongLong(v%d) + PyLong_AsLongLong(v%d));\n",
+          reg_index, r1->reg_index, r2->reg_index);
+        prev_reg = reg_index;
+        reg_index++;
+        break;
+      }
+
+    case LIR_LT_LL:
+      {
+        Reg *r2 = Stack_Pop(popped_reg_stack);
+        Reg *r1 = Stack_Pop(popped_reg_stack);
+        p += sprintf(p,
+          "    PyObject *v%d = Py_BuildValue(\"Oi\", PyLong_AsLongLong(v%d) < PyLong_AsLongLong(v%d) ? Py_True : Py_False);\n",
+          reg_index, r1->reg_index, r2->reg_index);
+        prev_reg = reg_index;
+        reg_index++;
         break;
       }
 
@@ -379,36 +452,33 @@ char* generate_c_code(trace_t *trace)
         exit_p += sprintf(exit_p,
           "L%d:\n"
           "    ctx->error = 1;\n"
+          "    ctx->exit_on = %d;\n"
           "    *ctx->frame->f_globals = ctx->f_globals_on_exit;\n"
           "    *ctx->frame->f_locals = ctx->f_locals_on_exit;\n"
-          , label_index);
+          , label_index, label_index);
         label_index++;
 
         Reg* temp_reg;
         while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
         {
-          exit_p += printf(exit_p,
+          exit_p += sprintf(exit_p,
             "    *ctx->stack_pointer++ = v%d;\n",
             temp_reg->reg_index);
         }
         Stack_Peek_Restore(value_stack);
 
-        exit_p += sprintf(exit_p, "%s", commit_f_locals(f_locals));
+        exit_p += sprintf(exit_p,
+            "    return NULL;\n");
 
         break;
       }
     }
   }
 
-  strcat(p, commit_f_locals(f_locals));
+  p += sprintf(p, "%s", commit_f_locals(f_locals));
   p += sprintf(p,
                "    return v%d;\n",
-               // "error:\n"
-               // "    ctx->error = 1;\n"
-               // "    return NULL;\n"
-               // "side_exit:\n"
-               // "    return NULL;\n"
-               0);
+               prev_reg);
 
   p += sprintf(p, "%s", exit);
   p += sprintf(p, "}\n");

@@ -3825,7 +3825,7 @@ main_loop:
 
                 if ((PyLong_Check(right) || PyFloat_Check(right)) && (PyLong_Check(left) || PyFloat_Check(left)))
                 {
-                    EMIT(LIR_COMPARE_OP_NUM, oparg);
+                    EMIT(LIR_COMPARE_OP_LL, oparg);
                 }
                 else
                 {

@@ -14,7 +14,6 @@ typedef enum
 {
   /// 型チェックガード
   LIR_GUARD_TYPE_LL, // long long 型かどうか
-  LIR_GUARD_TYPE_NUM, // 数値型 (long long, float) かどうか
   LIR_GUARD_TYPE_TRUE, // True かどうか
   LIR_GUARD_TYPE_FALSE, // False かどうか
   LIR_GUARD_ADD_OVERFLOW_LL, // 足し算の結果が long long に収まるかどうか
@@ -36,17 +35,17 @@ typedef enum
   LIR_ADD_LL,
 
   /// 等しい
-  LIR_EQ_NUM,
+  LIR_EQ_LL,
   /// 等しくない
-  LIR_NE_NUM,
+  LIR_NE_LL,
   /// より大きい
-  LIR_LT_NUM,
+  LIR_LT_LL,
   /// 以下
-  LIR_LE_NUM,
+  LIR_LE_LL,
   /// より大きい
-  LIR_GT_NUM,
+  LIR_GT_LL,
   /// 以上
-  LIR_GE_NUM,
+  LIR_GE_LL,
 
   /// サイドエグジット
   LIR_EXIT,

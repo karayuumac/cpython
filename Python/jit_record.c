@@ -122,14 +122,14 @@ void jit_record_LIR_GUARD_TYPE_BOOL(int bool)
 }
 
 /// 2つの値をポップして, 数値かどうかチェックを行い, 数値同士の比較を行い, 結果をスタックに乗せる
-void jit_record_LIR_COMPARE_OP_NUM(int oparg)
+void jit_record_LIR_COMPARE_OP_LL(int oparg)
 {
     lir_op_t *lir_pop = initialize_lir_op();
     lir_pop->opcode = LIR_POP;
     jit_record_lir(lir_pop);
 
     lir_op_t *lir_pop_guard_num = initialize_lir_op();
-    lir_pop_guard_num->opcode = LIR_GUARD_TYPE_NUM;
+    lir_pop_guard_num->opcode = LIR_GUARD_TYPE_LL;
     jit_record_lir(lir_pop_guard_num);
 
     lir_op_t *lir_pop_two = initialize_lir_op();
@@ -137,7 +137,7 @@ void jit_record_LIR_COMPARE_OP_NUM(int oparg)
     jit_record_lir(lir_pop_two);
 
     lir_op_t *lir_pop_two_guard_num = initialize_lir_op();
-    lir_pop_two_guard_num->opcode = LIR_GUARD_TYPE_NUM;
+    lir_pop_two_guard_num->opcode = LIR_GUARD_TYPE_LL;
     jit_record_lir(lir_pop_two_guard_num);
 
     // #define Py_LT 0
@@ -150,27 +150,27 @@ void jit_record_LIR_COMPARE_OP_NUM(int oparg)
     switch (oparg)
     {
     case Py_LT:
-        lir_compare_num->opcode = LIR_LT_NUM;
+        lir_compare_num->opcode = LIR_LT_LL;
         break;
 
     case Py_LE:
-        lir_compare_num->opcode = LIR_LE_NUM;
+        lir_compare_num->opcode = LIR_LE_LL;
         break;
 
     case Py_EQ:
-        lir_compare_num->opcode = LIR_EQ_NUM;
+        lir_compare_num->opcode = LIR_EQ_LL;
         break;
 
     case Py_NE:
-        lir_compare_num->opcode = LIR_NE_NUM;
+        lir_compare_num->opcode = LIR_NE_LL;
         break;
 
     case Py_GT:
-        lir_compare_num->opcode = LIR_GT_NUM;
+        lir_compare_num->opcode = LIR_GT_LL;
         break;
 
     case Py_GE:
-        lir_compare_num->opcode = LIR_GE_NUM;
+        lir_compare_num->opcode = LIR_GE_LL;
         break;
     }
     jit_record_lir(lir_compare_num);
