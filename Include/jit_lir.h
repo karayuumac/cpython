@@ -78,6 +78,7 @@ struct lir_op
       int lhs;
       int rhs;
     } operand;
+    _Py_CODEUNIT side_exit;
   } oparg;
 
   struct

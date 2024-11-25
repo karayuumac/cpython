@@ -105,14 +105,14 @@ int PyJIT_CheckTraceHead(PyFrameObject *frame, PyObject **stack_pointer) {
 }
 
 /// トレースの記録
-int PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer) {
+int PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer, _Py_CODEUNIT end_f_lasti) {
   if (jit_context == NULL || jit_context->state != TRACE_RECORDING || jit_context->current_trace == NULL) {
     return 0;
   }
 
   // トレースの終了判定
   if (jit_should_stop_recording(frame)) {
-    jit_stop_recoding();
+    jit_stop_recoding(end_f_lasti);
     return 0;
   }
 

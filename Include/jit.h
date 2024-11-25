@@ -14,7 +14,7 @@
 
 struct jit_execution_context;
 /// コンパイル済みコードの型定義
-typedef PyObject* (*jit_compiled_code_t)(struct jit_execution_context* ctx);
+typedef _Py_CODEUNIT (*jit_compiled_code_t)(struct jit_execution_context* ctx);
 
 /// トレース命令の情報を保持する構造体
 typedef struct trace_instruction {
@@ -97,6 +97,9 @@ typedef struct trace {
 
   /// コンパイル済みのネイティブコード
   jit_compiled_code_t compiled_code;
+
+  /// 正常終了後, インタプリタによる実行が行われる最初の f_lasti
+  _Py_CODEUNIT end_f_lasti;
 } trace_t;
 
 typedef enum {
@@ -148,7 +151,7 @@ PyAPI_FUNC(void) PyJIT_Finalize(void);
 
 PyAPI_FUNC(int) PyJIT_CheckTraceHead(PyFrameObject *frame, PyObject **stack_pointer);
 
-PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer);
+PyAPI_FUNC(int) PyJIT_RecordTrace(PyFrameObject *frame, PyObject **stack_pointer, _Py_CODEUNIT end_f_lasti);
 
 PyAPI_FUNC(trace_t *) PyJIT_GetCurrentTrace(void);
 

@@ -72,6 +72,7 @@ trace_t* jit_create_trace(PyFrameObject* frame)
     trace->parent = NULL;
     trace->counter = NULL;
     trace->compiled_code = NULL;
+    trace->end_f_lasti = 0;
 
     // 命令バッファの初期化
     trace->buffer.capacity = JIT_INIT_BUFFER_SIZE;
@@ -293,7 +294,7 @@ int jit_start_recording(PyFrameObject* frame)
 }
 
 /// トレースの記録を中止する
-void jit_stop_recoding(void)
+void jit_stop_recoding(_Py_CODEUNIT end_f_lasti)
 {
     if (jit_context == NULL || jit_context->state != TRACE_RECORDING)
     {
@@ -301,6 +302,7 @@ void jit_stop_recoding(void)
     }
 
     trace_t* trace = jit_context->current_trace;
+    trace->end_f_lasti = end_f_lasti;
     jit_dump_trace(trace);
 
     // トレースが有効な場合はキャッシュに追加する
@@ -343,7 +345,6 @@ void jit_record_instruction(PyFrameObject* frame, PyObject **stack_pointer)
             trace->buffer.instructions, sizeof(trace_instruction_t) * new_capacity);
         if (new_instructions == NULL)
         {
-            jit_stop_recoding();
             return;
         }
         trace->buffer.instructions = new_instructions;
@@ -371,7 +372,6 @@ void jit_record_instruction(PyFrameObject* frame, PyObject **stack_pointer)
     {
         PyMem_Free(inst->stack_values);
         PyMem_Free(inst->stack_types);
-        jit_stop_recoding();
         return;
     }
 
@@ -508,7 +508,7 @@ int jit_optimize_trace(trace_t* trace)
 }
 
 /// トレースの実行を行う
-PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t* trace, PyObject **stack_pointer)
+_Py_CODEUNIT jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t* trace, PyObject **stack_pointer)
 {
     jit_execution_context_t ctx = {
         .tstate = tstate,
@@ -525,34 +525,26 @@ PyObject* jit_execute_trace(PyThreadState* tstate, PyFrameObject* frame, trace_t
     };
 
     // トレースの実行
-    PyObject* result = trace->compiled_code(&ctx);
+    _Py_CODEUNIT side_exit_f_lasti = trace->compiled_code(&ctx);
 
     if (ctx.error)
     {
-        printf("exit_on: %d\n", ctx.exit_on);
+        // printf("exit_on: %d\n    side_exit: %u\n", ctx.exit_on, side_exit_f_lasti);
         if (PyErr_Occurred())
         {
-            return NULL;
+            return side_exit_f_lasti;
         }
 
-        // サイドエグジットの場合:
-        // 1. スタック状態の復元
-        // 2. フレームの実行位置を適切な位置に更新
-        frame->f_valuestack = ctx.stack_pointer;
-        frame->f_lasti = ctx.trace->current_offset;
-
+        // サイドエグジットの場合
         // 新しいトレースの記録を開始する
-        PyJIT_CheckTraceHead(frame, stack_pointer);
+        // PyJIT_CheckTraceHead(frame, stack_pointer);
 
-        return NULL;
+        return side_exit_f_lasti;
     }
 
     // 正常終了時の処理
-    frame->f_valuestack = ctx.stack_pointer;
     // トレースの最後の命令位置に更新
-    frame->f_lasti = trace->current_offset;
-
-    return result;
+    return trace->end_f_lasti;
 }
 
 void jit_record_lir(lir_op_t* lir_op)

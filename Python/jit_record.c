@@ -84,7 +84,6 @@ void jit_record_LIR_LL_ADD_OVERFLOW()
     lir_pop_two_guard_ll->opcode = LIR_GUARD_TYPE_LL;
     jit_record_lir(lir_pop_two_guard_ll);
 
-    // TODO: ここで, スタックからポップした値をどこかに保存しておく必要あり？ (LIR_GUARD_ADD_OVERFLOW_LL)
     lir_op_t *lir_guard_add_overflow_ll = initialize_lir_op();
     lir_guard_add_overflow_ll->opcode = LIR_GUARD_ADD_OVERFLOW_LL;
     jit_record_lir(lir_guard_add_overflow_ll);
@@ -99,7 +98,7 @@ void jit_record_LIR_LL_ADD_OVERFLOW()
 }
 
 /// 値をポップして, それが bool かどうかチェックした上で スタックに戻す
-void jit_record_LIR_GUARD_TYPE_BOOL(int bool)
+void jit_record_LIR_POP_JUMP_IF(int bool)
 {
     lir_op_t *lir_pop = initialize_lir_op();
     lir_pop->opcode = LIR_POP;
@@ -115,10 +114,6 @@ void jit_record_LIR_GUARD_TYPE_BOOL(int bool)
         lir_guard_type_bool->opcode = LIR_GUARD_TYPE_FALSE;
     }
     jit_record_lir(lir_guard_type_bool);
-
-    lir_op_t *lir_push = initialize_lir_op();
-    lir_push->opcode = LIR_PUSH;
-    jit_record_lir(lir_push);
 }
 
 /// 2つの値をポップして, 数値かどうかチェックを行い, 数値同士の比較を行い, 結果をスタックに乗せる
@@ -187,9 +182,10 @@ void jit_record_LIR_EXIT()
     jit_record_lir(lir_exit);
 }
 
-void jit_record_LIR_COMMIT()
+void jit_record_LIR_COMMIT(_Py_CODEUNIT side_exit_f_lasti)
 {
     lir_op_t *lir_commit = initialize_lir_op();
     lir_commit->opcode = LIR_COMMIT;
+    lir_commit->oparg.side_exit = side_exit_f_lasti;
     jit_record_lir(lir_commit);
 }

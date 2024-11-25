@@ -161,9 +161,19 @@ void Queue_Peek_Restore(Queue *queue)
   queue->s_queue_head = queue->queue_head;
 }
 
-Reg *Queue_Peek(Queue *queue)
+Reg *Queue_Head(Queue *queue)
 {
   return queue->queue[queue->queue_head];
+}
+
+Reg *Queue_Last(Queue *queue)
+{
+  int last = (queue->inplace_head - 1) % MAX_ELEMENT;
+  while (last < 0)
+  {
+    last += MAX_ELEMENT;
+  }
+  return queue->queue[last];
 }
 
 typedef struct env_
@@ -243,39 +253,39 @@ char* commit_f_locals(env_list_t *f_locals)
 
   if (f_locals->last_commited_index + 1 > f_locals->commited_index)
   {
-    return tp;
+    return "";
   }
 
-  c += sprintf(c,
+  tp += sprintf(tp,
     "    if (PyDict_CheckExact(locals)) {\n"
     );
 
   for (Py_ssize_t i = f_locals->last_commited_index + 1; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
-    c += sprintf(c,
+    tp += sprintf(tp,
       "        PyDict_SetItem(locals, GETITEM(names, %d), v%d);\n",
       env.f_env_index, env.reg->reg_index);
   }
 
-  c += sprintf(c,
+  tp += sprintf(tp,
     "    } else {\n"
     );
 
   for (Py_ssize_t i = f_locals->last_commited_index + 1; i <= f_locals->commited_index; i++)
   {
     env_t env = f_locals->envs[i];
-    c += sprintf(c,
+    tp += sprintf(tp,
       "        PyDict_SetItem(locals, GETITEM(names, %d), v%d);\n",
       env.f_env_index, env.reg->reg_index);
   }
 
-  c += sprintf(c,
+  tp += sprintf(tp,
     "    }\n");
 
   f_locals->last_commited_index = f_locals->commited_index;
 
-  return tp;
+  return c;
 }
 
 char* generate_c_code(trace_t *trace)
@@ -288,9 +298,10 @@ char* generate_c_code(trace_t *trace)
   Stack *value_stack = PyMem_Malloc(sizeof(Stack));
   Stack_Construct(value_stack);
 
-  // TODO: Queue にしないとダメ
   Queue *popped_reg_queue = PyMem_Malloc(sizeof(Queue));
   Queue_Construct(popped_reg_queue);
+
+  _Py_CODEUNIT side_exit_f_lasti = 0;
 
   env_list_t *f_locals = initialize();
 
@@ -301,7 +312,7 @@ char* generate_c_code(trace_t *trace)
                "#include <stdio.h>\n"
                "\n"
                "#define GETITEM(v, i) PyTuple_GET_ITEM((v), (i))\n" // TODO: 速度向上のため, name をストアすることを検討する
-               "PyObject* trace_func(jit_execution_context_t* ctx) {\n"
+               "_Py_CODEUNIT trace_func(jit_execution_context_t* ctx) {\n"
                "    PyObject *locals = ctx->frame->f_locals;\n"
                "    PyObject *names = ctx->frame->f_code->co_names;\n"
                "    PyObject *v0 = NULL;\n"
@@ -328,11 +339,8 @@ char* generate_c_code(trace_t *trace)
 
     case LIR_PUSH:
       {
-        assert(prev_reg != -1);
-
         Reg *reg = PyMem_Malloc(sizeof(Reg));
         reg->reg_index = prev_reg;
-        // reg->type = lir_op.reg.type;
 
         Stack_Push(value_stack, reg);
         break;
@@ -350,8 +358,7 @@ char* generate_c_code(trace_t *trace)
       {
         // 反映を確定
         commit(f_locals);
-
-        printf("%d : %d\n", f_locals->last_commited_index, f_locals->commited_index);
+        side_exit_f_lasti = lir_op.oparg.side_exit;
 
         // TODO: f_locals_on_exitの書き換えが必要？
         p += sprintf(p, "%s", commit_f_locals(f_locals));
@@ -394,7 +401,7 @@ char* generate_c_code(trace_t *trace)
 
     case LIR_GUARD_TYPE_LL:
       {
-        Reg* peeked_reg = Queue_Peek(popped_reg_queue);
+        Reg* peeked_reg = Queue_Last(popped_reg_queue);
         p += sprintf(p,
           "    if (!PyLong_Check(v%d)) {\n"
           "        goto L%d;\n"
@@ -419,13 +426,14 @@ char* generate_c_code(trace_t *trace)
         Stack_Peek_Restore(value_stack);
 
         exit_p += sprintf(exit_p,
-            "    return NULL;\n");
+            "    return %d;\n",
+            side_exit_f_lasti);
         break;
       }
 
     case LIR_GUARD_TYPE_TRUE:
       {
-        Reg* peeked_reg = Queue_Peek(popped_reg_queue);
+        Reg* peeked_reg = Queue_Last(popped_reg_queue);
         p += sprintf(p,
           "    if (!PyBool_Check(v%d) || v%d != Py_True) {\n"
           "        goto L%d;\n"
@@ -450,7 +458,8 @@ char* generate_c_code(trace_t *trace)
         Stack_Peek_Restore(value_stack);
 
         exit_p += sprintf(exit_p,
-            "    return NULL;\n");
+            "    return %d;\n",
+            side_exit_f_lasti);
         break;
       }
 
@@ -485,7 +494,8 @@ char* generate_c_code(trace_t *trace)
         Stack_Peek_Restore(value_stack);
 
         exit_p += sprintf(exit_p,
-            "    return NULL;\n");
+            "    return %d;\n",
+            side_exit_f_lasti);
         break;
       }
 
@@ -506,7 +516,7 @@ char* generate_c_code(trace_t *trace)
         Reg *r2 = Queue_Dequeue(popped_reg_queue);
         Reg *r1 = Queue_Dequeue(popped_reg_queue);
         p += sprintf(p,
-          "    PyObject *v%d = Py_BuildValue(\"Oi\", PyLong_AsLongLong(v%d) < PyLong_AsLongLong(v%d) ? Py_True : Py_False);\n",
+          "    PyObject *v%d = PyLong_AsLongLong(v%d) < PyLong_AsLongLong(v%d) ? Py_True : Py_False;\n",
           reg_index, r1->reg_index, r2->reg_index);
         prev_reg = reg_index;
         reg_index++;
@@ -537,7 +547,8 @@ char* generate_c_code(trace_t *trace)
         Stack_Peek_Restore(value_stack);
 
         exit_p += sprintf(exit_p,
-            "    return NULL;\n");
+            "    return %d;\n",
+            side_exit_f_lasti);
 
         break;
       }
@@ -545,9 +556,19 @@ char* generate_c_code(trace_t *trace)
   }
 
   p += sprintf(p, "%s", commit_f_locals(f_locals));
+
+  Reg* temp_reg;
+  while ((temp_reg = Stack_Peek_And_Move(value_stack)) != NULL)
+  {
+    p += sprintf(p,
+      "    *ctx->stack_pointer++ = v%d;\n",
+      temp_reg->reg_index);
+  }
+  Stack_Peek_Restore(value_stack);
+
   p += sprintf(p,
-               "    return v%d;\n",
-               prev_reg);
+               "    return %d;\n",
+               side_exit_f_lasti);
 
   p += sprintf(p, "%s", exit);
   p += sprintf(p, "}\n");

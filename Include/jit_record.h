@@ -12,9 +12,9 @@ void jit_record_LIR_ENV_LOAD_AND_PUSH(int oparg);
 void jit_record_LIR_LOAD_CONST_LL(long long value);
 void jit_record_LIR_POP_AND_ENV_STORE(int oparg);
 void jit_record_LIR_LL_ADD_OVERFLOW();
-void jit_record_LIR_GUARD_TYPE_BOOL(int bool);
+void jit_record_LIR_POP_JUMP_IF(int bool);
 void jit_record_LIR_COMPARE_OP_LL(int oparg);
 void jit_record_LIR_EXIT();
-void jit_record_LIR_COMMIT();
+void jit_record_LIR_COMMIT(_Py_CODEUNIT side_exit_f_lasti);
 
 #endif //JIT_RECORD_H

@@ -49,7 +49,7 @@ typedef struct jit_execution_context {
 int jit_init_context(void);
 void jit_free_context(void);
 int jit_start_recording(PyFrameObject *frame);
-void jit_stop_recoding(void);
+void jit_stop_recoding(_Py_CODEUNIT end_f_lasti);
 int jit_should_stop_recording(PyFrameObject *frame);
 void jit_record_instruction(PyFrameObject *frame, PyObject **stack_pointer);
 int jit_is_support_opcode(int opcode);
@@ -68,7 +68,7 @@ void jit_clear_trace_cache(void);
 
 int jit_optimize_trace(trace_t *trace);
 int jit_compile_trace(trace_t *trace);
-PyObject *jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace, PyObject **stack_pointer);
+_Py_CODEUNIT jit_execute_trace(PyThreadState *tstate, PyFrameObject *frame, trace_t *trace, PyObject **stack_pointer);
 int jit_check_all_guards(trace_t *trace, PyFrameObject *frame);
 int jit_check_guard(trace_guard_t *guard, PyObject *actual);
 

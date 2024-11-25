@@ -1301,35 +1301,31 @@ eval_frame_handle_pending(PyThreadState *tstate)
 #define TARGET(op) op: TARGET_##op
 #define DISPATCH() \
     { \
+        _Py_CODEUNIT current_f_lasti = f->f_lasti; \
+        /* printf("%d: %d\n", current_f_lasti, opcode); */ \
         if (!throwflag) { \
             trace_t *trace = jit_find_trace(f->f_code, f->f_lasti); \
             if (trace != NULL && trace->compiled_code != NULL) \
             { \
-                PyObject *result = jit_execute_trace(tstate, f, trace, stack_pointer); \
-                if (result != NULL) \
-                { \
-                    retval = result; \
-                    goto exit_eval_frame; \
-                } \
-                else \
-                { \
-                    printf("move to interpreter!\n"); \
-                    goto dispatch_opcode; \
-                } \
+                _Py_CODEUNIT result = jit_execute_trace(tstate, f, trace, stack_pointer); \
+                /* printf("-> %d\n", result); */ \
+                f->f_lasti = result; \
+                NEXTOPARG(); \
+                goto *opcode_targets[opcode]; \
             } \
             PyJIT_CheckTraceHead(f, stack_pointer); \
             if (jit_context && jit_context->state == TRACE_RECORDING) { \
-                PyJIT_RecordTrace(f, stack_pointer); \
+                PyJIT_RecordTrace(f, stack_pointer, INSTR_OFFSET()); \
             } \
         } \
         if (trace_info.cframe.use_tracing OR_DTRACE_LINE OR_LLTRACE) { \
             goto tracing_dispatch; \
         } \
         f->f_lasti = INSTR_OFFSET(); \
-        NEXTOPARG();                                                   \
+        NEXTOPARG(); \
         if (jit_context != NULL && jit_context->state == TRACE_RECORDING) \
         { \
-            EMIT(LIR_COMMIT); \
+            EMIT(LIR_COMMIT, current_f_lasti); \
             goto *opcode_targets_rec[opcode]; \
         } \
         else \
@@ -4026,7 +4022,7 @@ main_loop:
                 if (Py_IsFalse(cond)) {
                     Py_DECREF(cond);
 
-                    EMIT(LIR_GUARD_TYPE_BOOL, 0);
+                    EMIT(LIR_POP_JUMP_IF, 0);
 
                     DISPATCH();
                 }
@@ -4034,7 +4030,7 @@ main_loop:
                     Py_DECREF(cond);
                     JUMPTO(oparg);
 
-                    EMIT(LIR_GUARD_TYPE_BOOL, 1);
+                    EMIT(LIR_POP_JUMP_IF, 1);
 
                     CHECK_EVAL_BREAKER();
                     DISPATCH();
@@ -4044,13 +4040,13 @@ main_loop:
                 if (err > 0) {
                     JUMPTO(oparg);
 
-                    EMIT(LIR_GUARD_TYPE_BOOL, 1);
+                    EMIT(LIR_POP_JUMP_IF, 1);
 
                     CHECK_EVAL_BREAKER();
                 }
                 else if (err == 0)
                 {
-                    EMIT(LIR_GUARD_TYPE_BOOL, 0);
+                    EMIT(LIR_POP_JUMP_IF, 0);
                 }
                 else
                     goto error;
