@@ -1214,6 +1214,8 @@ stack_effect(int opcode, int oparg, int jump)
             return 2;
         case ROT_N:
             return 0;
+        case LOAD_FAST_ATTR:
+            return 1;
         default:
             return PY_INVALID_STACK_EFFECT;
     }
@@ -7348,6 +7350,7 @@ optimize_basic_block(struct compiler *c, basicblock *bb, PyObject *consts)
         struct instr *inst = &bb->b_instr[i];
         int oparg = inst->i_oparg;
         int nextop = i+1 < bb->b_iused ? bb->b_instr[i+1].i_opcode : 0;
+        int nextoparg = i+1 < bb->b_iused ? bb->b_instr[i+1].i_oparg : 0;
         if (is_jump(inst)) {
             /* Skip over empty basic blocks. */
             while (inst->i_target->b_iused == 0) {
@@ -7537,6 +7540,20 @@ optimize_basic_block(struct compiler *c, basicblock *bb, PyObject *consts)
                 }
                 if (i >= oparg - 1) {
                     fold_rotations(inst - oparg + 1, oparg);
+                }
+                break;
+
+            case LOAD_FAST:
+                if (nextop == LOAD_ATTR)
+                {
+                    if (oparg >= 256 || nextoparg >= 256)
+                    {
+                        break;
+                    }
+                    inst->i_opcode = LOAD_FAST_ATTR;
+                    inst->i_oparg = (oparg << 8) | nextoparg;
+                    bb->b_instr[i+1].i_opcode = NOP;
+                    i += 2;
                 }
                 break;
         }
