@@ -7556,6 +7556,20 @@ optimize_basic_block(struct compiler *c, basicblock *bb, PyObject *consts)
                     i += 2;
                 }
                 break;
+
+            case CALL_METHOD:
+                if (nextop == STORE_FAST)
+                {
+                    if (oparg >= 256 || nextoparg >= 256)
+                    {
+                        break;
+                    }
+                    inst->i_opcode = CALL_STORE_FAST;
+                    inst->i_oparg = (oparg << 8) | nextoparg;
+                    bb->b_instr[i+1].i_opcode = NOP;
+                    i += 2;
+                }
+                break;
         }
     }
     return 0;

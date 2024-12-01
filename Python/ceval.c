@@ -4621,6 +4621,63 @@ main_loop:
                 DISPATCH();
             }
 
+        case TARGET(CALL_STORE_FAST):
+            {
+                // 上位8ビットがcall, 下位8ビットがstore
+                int call_idx = oparg >> 8;
+                int store_idx = oparg & 0xFF;
+
+                /* Designed to work in tamdem with LOAD_METHOD. */
+                PyObject **sp, *res, *meth;
+
+                sp = stack_pointer;
+
+                meth = PEEK(call_idx + 2);
+                if (meth == NULL) {
+                    /* `meth` is NULL when LOAD_METHOD thinks that it's not
+                       a method call.
+
+                       Stack layout:
+
+                           ... | NULL | callable | arg1 | ... | argN
+                                                                ^- TOP()
+                                                   ^- (-oparg)
+                                        ^- (-oparg-1)
+                                 ^- (-oparg-2)
+
+                       `callable` will be POPed by call_function.
+                       NULL will will be POPed manually later.
+                    */
+                    res = call_function(tstate, &trace_info, &sp, call_idx, NULL);
+                    stack_pointer = sp;
+                    (void)POP(); /* POP the NULL. */
+                }
+                else {
+                    /* This is a method call.  Stack layout:
+
+                         ... | method | self | arg1 | ... | argN
+                                                            ^- TOP()
+                                               ^- (-oparg)
+                                        ^- (-oparg-1)
+                               ^- (-oparg-2)
+
+                      `self` and `method` will be POPed by call_function.
+                      We'll be passing `oparg + 1` to call_function, to
+                      make it accept the `self` as a first argument.
+                    */
+                    res = call_function(tstate, &trace_info, &sp, oparg + 1, NULL);
+                    stack_pointer = sp;
+                }
+
+                // PUSH(res);
+                if (res == NULL)
+                    goto error;
+
+                CHECK_EVAL_BREAKER();
+
+                SETLOCAL(store_idx, res);
+                DISPATCH();
+            }
 
 #if USE_COMPUTED_GOTOS
         _unknown_opcode:
