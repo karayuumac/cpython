@@ -4665,7 +4665,7 @@ main_loop:
                       We'll be passing `oparg + 1` to call_function, to
                       make it accept the `self` as a first argument.
                     */
-                    res = call_function(tstate, &trace_info, &sp, oparg + 1, NULL);
+                    res = call_function(tstate, &trace_info, &sp, call_idx + 1, NULL);
                     stack_pointer = sp;
                 }
 
@@ -4676,6 +4676,12 @@ main_loop:
                 CHECK_EVAL_BREAKER();
 
                 SETLOCAL(store_idx, res);
+                DISPATCH();
+            }
+
+        case TARGET(CALL_POP):
+            {
+                stack_pointer -= (-oparg-2);
                 DISPATCH();
             }
 

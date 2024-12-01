@@ -1216,6 +1216,10 @@ stack_effect(int opcode, int oparg, int jump)
             return 0;
         case LOAD_FAST_ATTR:
             return 1;
+        case CALL_STORE_FAST:
+            return -(oparg >> 8)-2;
+        case CALL_POP:
+            return -oparg-2;
         default:
             return PY_INVALID_STACK_EFFECT;
     }
@@ -7570,6 +7574,14 @@ optimize_basic_block(struct compiler *c, basicblock *bb, PyObject *consts)
                     i += 2;
                 }
                 break;
+
+            case CALL_POP:
+                if (nextop == POP_TOP)
+                {
+                    inst->i_opcode = CALL_POP;
+                    bb->b_instr[i+1].i_opcode = NOP;
+                    i += 2;
+                }
         }
     }
     return 0;

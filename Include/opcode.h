@@ -137,6 +137,7 @@ extern "C" {
 #define DICT_UPDATE             165
 #define LOAD_FAST_ATTR          166
 #define CALL_STORE_FAST         167
+#define CALL_POP                168
 #ifdef NEED_OPCODE_JUMP_TABLES
 static uint32_t _PyOpcode_RelativeJump[8] = {
     0U,
