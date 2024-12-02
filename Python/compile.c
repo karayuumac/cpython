@@ -1214,10 +1214,6 @@ stack_effect(int opcode, int oparg, int jump)
             return 2;
         case ROT_N:
             return 0;
-        case LOAD_FAST_ATTR:
-            return 1;
-        case CALL_STORE_FAST:
-            return -(oparg >> 8)-2;
         case CALL_POP:
             return -oparg-2;
         default:
@@ -7547,41 +7543,15 @@ optimize_basic_block(struct compiler *c, basicblock *bb, PyObject *consts)
                 }
                 break;
 
-            case LOAD_FAST:
-                if (nextop == LOAD_ATTR)
-                {
-                    if (oparg >= 256 || nextoparg >= 256)
-                    {
-                        break;
-                    }
-                    inst->i_opcode = LOAD_FAST_ATTR;
-                    inst->i_oparg = (oparg << 8) | nextoparg;
-                    bb->b_instr[i+1].i_opcode = NOP;
-                    i += 2;
-                }
-                break;
-
             case CALL_METHOD:
-                if (nextop == STORE_FAST)
-                {
-                    if (oparg >= 256 || nextoparg >= 256)
-                    {
-                        break;
-                    }
-                    inst->i_opcode = CALL_STORE_FAST;
-                    inst->i_oparg = (oparg << 8) | nextoparg;
-                    bb->b_instr[i+1].i_opcode = NOP;
-                    i += 2;
-                }
-                break;
-
-            case CALL_POP:
                 if (nextop == POP_TOP)
                 {
                     inst->i_opcode = CALL_POP;
+                    inst->i_oparg = oparg;
                     bb->b_instr[i+1].i_opcode = NOP;
                     i += 2;
                 }
+                break;
         }
     }
     return 0;
